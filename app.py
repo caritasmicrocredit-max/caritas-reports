@@ -26,11 +26,13 @@ def check_login(username, password):
 # --- وظيفة جلب البيانات من الـ View ---
 def fetch_report_data():
     try:
-        res = supabase.table("all_payments_report").select("*").execute()
+        # إضافة limit كبير لضمان جلب كل الحركات
+        res = supabase.table("all_payments_report").select("*").limit(50000).execute()
         return pd.DataFrame(res.data)
-    except:
+    except Exception as e:
+        st.error(f"خطأ في جلب البيانات: {e}")
         return pd.DataFrame()
-
+    
 # --- نظام تسجيل الدخول ---
 if 'user' not in st.session_state:
     st.markdown("<h2 style='text-align: center;'>تسجيل الدخول - نظام سدادات كاريتاس</h2>", unsafe_allow_html=True)
