@@ -3,26 +3,23 @@ import pandas as pd
 from supabase import create_client
 from datetime import datetime
 
-# 1. إعدادات الصفحة واللغة (يمين إلى يسار)
+# 1. إعدادات الصفحة واللغة
 st.set_page_config(page_title="نظام تقارير كاريتاس", layout="wide")
 
-# كود CSS لتحويل الاتجاه للعربية وتحسين الألوان وإخفاء معالم Streamlit
+# كود CSS لتنسيق الواجهة (RTL) وتحسين الألوان
 st.markdown("""
     <style>
-    /* تحويل الصفحة لليمين */
     .main { direction: rtl; text-align: right; }
     .stSidebar { direction: rtl; }
     [data-testid="stMetricValue"] { text-align: right; color: #1f77b4; }
-    
-    /* إخفاء القوائم غير الضرورية */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
     .stDeployButton {display:none;}
-    
-    /* تنسيق الجداول والخانات */
-    .stDataFrame { direction: rtl; }
     input { text-align: right; }
+    .stDataFrame div { direction: rtl; }
+    /* تحسين شكل خانات الإدخال */
+    div[data-baseweb="input"] { direction: rtl; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -31,7 +28,7 @@ URL = st.secrets["SUPABASE_URL"]
 KEY = st.secrets["SUPABASE_KEY"]
 supabase = create_client(URL, KEY)
 
-# --- وظائف النظام المطورة ---
+# --- وظائف النظام ---
 
 def check_login(username, password):
     try:
@@ -40,22 +37,21 @@ def check_login(username, password):
     except: return None
 
 def fetch_all_data_paginated():
-    """وظيفة تجلب كل البيانات مهما كان عددها (تتخطى حاجز الـ 1000)"""
+    """جلب كل البيانات مع تخطي حاجز الـ 1000 سطر"""
     all_data = []
     limit = 1000
     offset = 0
-    
     while True:
         res = supabase.table("all_payments_report").select("*").range(offset, offset + limit - 1).execute()
         data = res.data
+        if not data: break
         all_data.extend(data)
-        if len(data) < limit: # إذا رجع أقل من 1000 يعني مفيش بيانات تانية
-            break
+        if len(data) < limit: break
         offset += limit
-        
     df = pd.DataFrame(all_data)
     if not df.empty:
-        df['تاريخ الدفع'] = pd.to_datetime(df['تاريخ الدفع'], dayfirst=True)
+        # تحويل التاريخ مع معالجة الأخطاء
+        df['تاريخ الدفع'] = pd.to_datetime(df['تاريخ الدفع'], dayfirst=True, errors='coerce')
     return df
 
 # --- واجهة تسجيل الدخول ---
@@ -71,77 +67,96 @@ if 'user' not in st.session_state:
                 if user:
                     st.session_state['user'] = user
                     st.rerun()
-                else:
-                    st.error("خطأ في البيانات")
+                else: st.error("بيانات الدخول غير صحيحة")
 else:
-    # --- لوحة التحكم ---
     user = st.session_state['user']
     is_admin = user.get('role') == 'admin'
     user_branches = user.get('branches', [])
 
-    st.sidebar.markdown(f"### أهلاً: {user['full_name']}")
-    if st.sidebar.button("خروج"):
+    st.sidebar.markdown(f"### أهلاً بك: \n**{user['full_name']}**")
+    if st.sidebar.button("تسجيل الخروج"):
         del st.session_state['user']
         st.rerun()
 
-    # جلب كافة البيانات (بدون ليميت)
-    with st.spinner('جاري تحديث البيانات...'):
+    with st.spinner('جاري تحميل البيانات المحدثة...'):
         df_raw = fetch_all_data_paginated()
 
     if not df_raw.empty:
-        # فلترة الفروع
-        df_accessible = df_raw if is_admin else df_raw[df_raw['branch_name'].isin(user_branches)]
+        # فلترة الفروع بناءً على الصلاحية
+        df_acc = df_raw if is_admin else df_raw[df_raw['branch_name'].isin(user_branches)]
 
         # --- الفلاتر الجانبية ---
-        st.sidebar.header("🔍 فلاتر البحث")
+        st.sidebar.header("🔍 أدوات البحث")
         
-        # البحث بالاسم أو الكود (يحتوي على)
-        search_query = st.sidebar.text_input("بحث باسم العميل أو الكود:")
+        # خانات بحث مستقلة
+        search_name = st.sidebar.text_input("بحث باسم العميل:")
+        search_code = st.sidebar.text_input("بحث بكود العميل:")
 
         # فلاتر التاريخ
-        min_date = df_accessible['تاريخ الدفع'].min().date()
-        max_date = df_accessible['تاريخ الدفع'].max().date()
-        start_date = st.sidebar.date_input("من تاريخ", min_date)
-        end_date = st.sidebar.date_input("إلى تاريخ", max_date)
-        
-        # فلتر الكود
-        codes = ["الكل"] + sorted(df_accessible['كود الخدمة'].unique().tolist())
-        selected_code = st.sidebar.selectbox("كود الخدمة", codes)
+        valid_dates = df_acc['تاريخ الدفع'].dropna()
+        if not valid_dates.empty:
+            start_date = st.sidebar.date_input("من تاريخ", valid_dates.min().date())
+            end_date = st.sidebar.date_input("إلى تاريخ", valid_dates.max().date())
+        else:
+            start_date, end_date = None, None
 
-        # تطبيق الفلاتر
-        mask = (df_accessible['تاريخ الدفع'].dt.date >= start_date) & \
-               (df_accessible['تاريخ الدفع'].dt.date <= end_date)
+        codes = ["الكل"] + sorted(df_acc['كود الخدمة'].unique().tolist())
+        sel_code = st.sidebar.selectbox("كود الخدمة", codes)
+
+        # --- تطبيق الفلترة المنطقية ---
+        mask = pd.Series([True] * len(df_acc), index=df_acc.index)
         
-        if selected_code != "الكل":
-            mask &= (df_accessible['كود الخدمة'] == selected_code)
+        # فلتر التاريخ
+        if start_date and end_date:
+            mask &= (df_acc['تاريخ الدفع'].dt.date >= start_date) & (df_acc['تاريخ الدفع'].dt.date <= end_date)
+        
+        # فلتر كود الخدمة
+        if sel_code != "الكل":
+            mask &= (df_acc['كود الخدمة'] == sel_code)
             
-        if search_query:
-            # البحث في عمود 'اسم العميل' و 'كود العميل'
-            mask &= (df_accessible['اسم العميل'].astype(str).str.contains(search_query, na=False)) | \
-                    (df_accessible['كود العميل'].astype(str).str.contains(search_query, na=False))
+        # بحث بالاسم (يحتوي على جزء من النص)
+        if search_name:
+            mask &= df_acc['client_name'].astype(str).str.contains(search_name, na=False, case=False)
+            
+        # بحث بكود العميل (يحتوي على جزء من النص)
+        if search_code:
+            mask &= df_acc['client_code'].astype(str).str.contains(search_code, na=False, case=False)
 
-        final_df = df_accessible.loc[mask]
+        final_df = df_acc.loc[mask]
 
-        # --- العرض ---
-        st.title("📋 استعراض السدادات")
+        # --- العرض الرئيسي ---
+        st.title("📑 استعراض تقارير السدادات")
         
         c1, c2, c3 = st.columns(3)
         c1.metric("إجمالي المبالغ", f"{final_df['المبلغ'].sum():,.2f} ج.م")
         c2.metric("عدد العمليات", f"{len(final_df)}")
         with c3:
-            st.write("**تفاصيل الأكواد:**")
-            for c, count in final_df['كود الخدمة'].value_counts().items():
-                st.write(f"🔹 {c}: {count}")
+            st.write("**إحصائيات الأكواد:**")
+            counts = final_df['كود الخدمة'].value_counts()
+            for c, count in counts.items():
+                st.write(f"🔹 {c}: {count} حركة")
 
         st.divider()
-
-        # عرض الجدول بتنسيق عربي
+        
+        # تنسيق الجدول النهائي للعرض
         display_df = final_df.copy()
-        display_df['تاريخ الدفع'] = display_df['تاريخ الدفع'].dt.strftime('%Y-%m-%d')
+        # إعادة تسمية الأعمدة لتظهر بالعربي في الجدول
+        display_df = display_df.rename(columns={
+            'client_code': 'كود العميل',
+            'client_name': 'اسم العميل',
+            'branch_name': 'الفرع'
+        })
+        
+        if 'تاريخ الدفع' in display_df.columns:
+            display_df['تاريخ الدفع'] = display_df['تاريخ الدفع'].dt.strftime('%Y-%m-%d')
+        
         st.dataframe(display_df, use_container_width=True)
 
-        # تحميل البيانات
+        # زر التحميل
         csv = final_df.to_csv(index=False).encode('utf-8-sig')
-        st.sidebar.download_button("📥 تحميل إكسيل", csv, f"Report_{datetime.now().date()}.csv", "text/csv", use_container_width=True)
+        st.sidebar.download_button("📥 تحميل التقرير (Excel)", csv, f"Caritas_Report_{datetime.now().date()}.csv", "text/csv", use_container_width=True)
     else:
-        st.warning("لا توجد بيانات.")
+        st.warning("لا توجد بيانات حالياً.")
+
+st.sidebar.markdown("---")
+st.sidebar.caption("نظام كاريتاس 2026")
