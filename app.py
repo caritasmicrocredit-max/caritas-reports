@@ -3,40 +3,62 @@ import pandas as pd
 from supabase import create_client
 from datetime import datetime
 
-# 1. إعدادات الأمان - قراءة الروابط من Secrets (وليس كتابتها يدوياً)
+# 1. إعدادات الصفحة وإخفاء معالم Streamlit و GitHub
+st.set_page_config(
+    page_title="نظام تقارير كاريتاس", 
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# كود CSS لإخفاء زر GitHub والقائمة العلوية تماماً لضمان الخصوصية
+st.markdown("""
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    .stDeployButton {display:none;}
+    div.block-container {padding-top: 2rem;}
+    </style>
+    """, unsafe_allow_html=True)
+
+# 2. الاتصال بـ Supabase من الـ Secrets
 try:
     URL = st.secrets["SUPABASE_URL"]
     KEY = st.secrets["SUPABASE_KEY"]
     supabase = create_client(URL, KEY)
 except Exception as e:
-    st.error("خطأ في إعدادات Secrets. يرجى التأكد من ضبط SUPABASE_URL و SUPABASE_KEY في Streamlit Settings.")
+    st.error("يرجى ضبط SUPABASE_URL و SUPABASE_KEY في إعدادات Secrets على Streamlit Cloud.")
     st.stop()
 
-# إعدادات الصفحة (العنوان والشكل)
-st.set_page_config(page_title="نظام تقارير كاريتاس", layout="wide")
+# --- وظائف النظام ---
 
-# --- وظيفة التأكد من اسم المستخدم والباسورد ---
 def check_login(username, password):
+    """التحقق من بيانات الدخول"""
     try:
         res = supabase.table("app_users").select("*").eq("id", username).eq("password_hash", password).execute()
         return res.data[0] if res.data else None
     except:
         return None
 
-# --- وظيفة جلب البيانات من الـ View ---
-def fetch_report_data():
+def fetch_data():
+    """جلب كافة البيانات مع تجاوز حد الـ 1000 سطر"""
     try:
-        # إضافة limit كبير لضمان جلب كل الحركات
-        res = supabase.table("all_payments_report").select("*").limit(50000).execute()
-        return pd.DataFrame(res.data)
+        # استخدام limit(100000) لجلب كل الحركات في قاعدة البيانات
+        res = supabase.table("all_payments_report").select("*").limit(100000).execute()
+        df = pd.DataFrame(res.data)
+        if not df.empty:
+            # تحويل التاريخ لنوع datetime للفلترة الصحيحة
+            df['تاريخ الدفع'] = pd.to_datetime(df['تاريخ الدفع'], dayfirst=True)
+        return df
     except Exception as e:
         st.error(f"خطأ في جلب البيانات: {e}")
         return pd.DataFrame()
-    
-# --- نظام تسجيل الدخول ---
+
+# --- واجهة تسجيل الدخول ---
+
 if 'user' not in st.session_state:
-    st.markdown("<h2 style='text-align: center;'>تسجيل الدخول - نظام سدادات كاريتاس</h2>", unsafe_allow_html=True)
-    col1, col2, col3 = st.columns([1, 2, 1])
+    st.markdown("<h2 style='text-align: center; color: #2c3e50;'>نظام استعراض سدادات كاريتاس</h2>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
         with st.form("login_form"):
             u = st.text_input("اسم المستخدم (ID)")
@@ -49,81 +71,90 @@ if 'user' not in st.session_state:
                 else:
                     st.error("اسم المستخدم أو كلمة المرور غير صحيحة")
 else:
-    # --- لوحة التحكم بعد الدخول بنجاح ---
-    current_user = st.session_state['user']
-    user_branches = current_user.get('branches', [])
-    is_admin = current_user.get('role') == 'admin'
+    # --- لوحة التحكم (Dashboard) ---
+    user = st.session_state['user']
+    is_admin = user.get('role') == 'admin'
+    user_branches = user.get('branches', []) # مصفوفة الفروع المسموحة
 
-    # شريط جانبي للمعلومات والخروج
-    st.sidebar.success(f"مرحباً: {current_user['full_name']}")
-    if st.sidebar.button("تسجيل الخروج"):
+    # الشريط الجانبي
+    st.sidebar.markdown(f"### مرحباً: \n **{user['full_name']}**")
+    if st.sidebar.button("تسجيل الخروج", use_container_width=True):
         del st.session_state['user']
         st.rerun()
 
-    st.title("📊 استعراض سدادات الفروع")
+    st.sidebar.divider()
+    
+    # جلب البيانات
+    df_raw = fetch_data()
 
-    # تحميل البيانات
-    df = fetch_report_data()
+    if not df_raw.empty:
+        # 1. فلترة الفروع حسب الصلاحيات
+        if is_admin:
+            df_accessible = df_raw.copy()
+        else:
+            # عرض فقط الفروع الموجودة في مصفوفة اليوزر
+            df_accessible = df_raw[df_raw['branch_name'].isin(user_branches)].copy()
 
-    if not df.empty:
-        # تحويل التاريخ لنوع تاريخ لسهولة الفلترة
-        df['تاريخ الدفع'] = pd.to_datetime(df['تاريخ الدفع'], dayfirst=True)
-
-        # فلترة البيانات بناءً على فروع المستخدم (إلا إذا كان Admin)
-        if not is_admin:
-            df = df[df['branch_name'].isin(user_branches)]
-
-        # --- الفلاتر الجانبية ---
-        st.sidebar.header("🔍 فلاتر البحث")
+        # 2. فلاتر البحث في الجانب
+        st.sidebar.header("🔍 فلاتر التقارير")
         
         # فلتر التاريخ
-        min_date = df['تاريخ الدفع'].min().date()
-        max_date = df['تاريخ الدفع'].max().date()
-        start_date = st.sidebar.date_input("من تاريخ", min_date)
-        end_date = st.sidebar.date_input("إلى تاريخ", max_date)
+        min_d = df_accessible['تاريخ الدفع'].min().date()
+        max_d = df_accessible['تاريخ الدفع'].max().date()
+        date_range = st.sidebar.date_input("اختر الفترة", [min_d, max_d])
         
         # فلتر كود الخدمة (90074, opay, إلخ)
-        available_codes = ["الكل"] + sorted(df['كود الخدمة'].unique().tolist())
-        selected_code = st.sidebar.selectbox("كود الخدمة", available_codes)
+        codes = ["الكل"] + sorted(df_accessible['كود الخدمة'].unique().tolist())
+        selected_code = st.sidebar.selectbox("كود الخدمة", codes)
 
-        # تطبيق الفلاتر على الجدول
-        filtered_df = df[
-            (df['تاريخ الدفع'].dt.date >= start_date) & 
-            (df['تاريخ الدفع'].dt.date <= end_date)
-        ]
-        
+        # تطبيق الفلاتر النهائية
+        if len(date_range) == 2:
+            start_date, end_date = date_range
+            mask = (df_accessible['تاريخ الدفع'].dt.date >= start_date) & \
+                   (df_accessible['تاريخ الدفع'].dt.date <= end_date)
+        else:
+            mask = True
+
         if selected_code != "الكل":
-            filtered_df = filtered_df[filtered_df['كود الخدمة'] == selected_code]
+            mask = mask & (df_accessible['كود الخدمة'] == selected_code)
+            
+        final_df = df_accessible.loc[mask]
 
-        # --- عرض الإحصائيات في الأعلى ---
-        st.subheader("📝 ملخص التقرير")
-        c1, c2, c3 = st.columns(3)
-        c1.metric("إجمالي المبالغ", f"{filtered_df['المبلغ'].sum():,.2f} ج.م")
-        c2.metric("عدد الحركات", f"{len(filtered_df)} حركة")
+        # --- العرض الرئيسي ---
+        st.title("📑 تقرير السدادات")
         
-        # توزيع الحركات لكل كود
-        with c3:
-            counts = filtered_df['كود الخدمة'].value_counts()
-            for code, count in counts.items():
-                st.write(f"🔹 كود **{code}**: {count} حركة")
+        # الإحصائيات العلوية
+        m1, m2, m3 = st.columns(3)
+        m1.metric("إجمالي المبالغ المفلترة", f"{final_df['المبلغ'].sum():,.2f} ج.م")
+        m2.metric("عدد الحركات", f"{len(final_df)} حركة")
+        
+        with m3:
+            st.markdown("**تفاصيل الأكواد:**")
+            counts = final_df['كود الخدمة'].value_counts()
+            for c, count in counts.items():
+                st.write(f"🔹 {c}: {count} حركة")
 
         st.divider()
 
-        # --- عرض الجدول النهائي ---
-        # تنسيق التاريخ للعرض فقط بشكل لطيف
-        display_df = filtered_df.copy()
+        # عرض الجدول
+        # تحويل التاريخ لشكل نصي للعرض فقط
+        display_df = final_df.copy()
         display_df['تاريخ الدفع'] = display_df['تاريخ الدفع'].dt.strftime('%Y-%m-%d')
         st.dataframe(display_df, use_container_width=True)
 
-        # --- زر التنزيل ---
+        # زر التحميل
         st.sidebar.divider()
-        csv = filtered_df.to_csv(index=False).encode('utf-8-sig')
+        csv = final_df.to_csv(index=False).encode('utf-8-sig')
         st.sidebar.download_button(
-            label="📥 تحميل النتائج (Excel)",
+            label="📥 تحميل النتائج Excel/CSV",
             data=csv,
-            file_name=f"Report_{datetime.now().strftime('%Y%m%d')}.csv",
+            file_name=f"Caritas_Report_{datetime.now().strftime('%Y%m%d')}.csv",
             mime='text/csv',
             use_container_width=True
         )
     else:
-        st.warning("لا توجد بيانات متاحة لعرضها بناءً على صلاحياتك.")
+        st.warning("لا توجد بيانات متاحة لعرضها.")
+
+# تذييل بسيط
+st.sidebar.markdown("---")
+st.sidebar.caption("نظام إدارة ميكروكريديت - كاريتاس")
