@@ -2,18 +2,19 @@ import streamlit as st
 import pandas as pd
 from supabase import create_client
 from datetime import datetime
+import io
+from openpyxl import Workbook
+from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 
 # 1. إعدادات الصفحة
 st.set_page_config(page_title="نظام تقارير كاريتاس", layout="wide")
 
-# 2. كود التنسيق الاحترافي (CSS) - لجعل الواجهة يمين والشكل مربعات
+# 2. كود التنسيق الاحترافي (CSS)
 st.markdown("""
     <style>
-    /* جعل الصفحة بالكامل من اليمين للشمال */
     .main { direction: rtl; text-align: right; }
     [data-testid="stSidebar"] { direction: rtl; background-color: #f8f9fa; }
-    
-    /* تنسيق العنوان في المنتصف */
     .main-title {
         text-align: center;
         color: #1e3a8a;
@@ -23,8 +24,6 @@ st.markdown("""
         border: 2px solid #bfdbfe;
         margin-bottom: 30px;
     }
-
-    /* تنسيق مربعات الإحصائيات */
     .metric-card {
         background-color: #ffffff;
         padding: 20px;
@@ -33,26 +32,13 @@ st.markdown("""
         border-top: 5px solid #1e3a8a;
         text-align: center;
     }
-    .metric-value {
-        font-size: 24px;
-        font-weight: bold;
-        color: #1e3a8a;
-    }
-    .metric-label {
-        font-size: 16px;
-        color: #6b7280;
-    }
-
-    /* إخفاء معالم ستريمليت وجيت هاب */
+    .metric-value { font-size: 24px; font-weight: bold; color: #1e3a8a; }
+    .metric-label { font-size: 16px; color: #6b7280; }
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
     .stDeployButton {display:none;}
-    
-    /* تحسين شكل الجدول */
     .stDataFrame { border: 1px solid #e5e7eb; border-radius: 10px; }
-    
-    /* ضبط خانات البحث في اليمين */
     input { text-align: right; direction: rtl; }
     </style>
     """, unsafe_allow_html=True)
@@ -62,7 +48,8 @@ URL = st.secrets["SUPABASE_URL"]
 KEY = st.secrets["SUPABASE_KEY"]
 supabase = create_client(URL, KEY)
 
-# --- الوظائف ---
+# ===================== الوظائف =====================
+
 def fetch_all_data_paginated():
     all_data = []
     limit, offset = 1000, 0
@@ -81,7 +68,393 @@ def check_login(u, p):
     res = supabase.table("app_users").select("*").eq("id", u).eq("password_hash", p).execute()
     return res.data[0] if res.data else None
 
-# --- واجهة الدخول ---
+def thin_border():
+    s = Side(border_style="thin", color="D1D5DB")
+    return Border(left=s, right=s, top=s, bottom=s)
+
+def generate_excel_single(df_display, sheet_title="التقرير", report_title="تقرير السدادات"):
+    """إنشاء ملف Excel ملون لشيت واحد"""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = sheet_title[:31]
+    ws.sheet_view.rightToLeft = True
+
+    DARK_BLUE  = "1E3A8A"
+    LIGHT_BLUE = "EFF6FF"
+    ALT_ROW    = "F0F4FF"
+    TOTAL_BG   = "BFDBFE"
+    WHITE      = "FFFFFF"
+    GRAY_TEXT  = "6B7280"
+
+    cols = list(df_display.columns)
+    n_cols = len(cols)
+    last_col = get_column_letter(n_cols)
+
+    # ── صف العنوان ──
+    ws.merge_cells(f'A1:{last_col}1')
+    tc = ws['A1']
+    tc.value = report_title
+    tc.font = Font(bold=True, size=14, color=DARK_BLUE, name="Arial")
+    tc.fill = PatternFill("solid", fgColor=LIGHT_BLUE)
+    tc.alignment = Alignment(horizontal='center', vertical='center')
+    ws.row_dimensions[1].height = 32
+
+    # ── صف الرؤوس ──
+    for ci, header in enumerate(cols, 1):
+        cell = ws.cell(row=2, column=ci, value=header)
+        cell.font = Font(bold=True, color=WHITE, name="Arial", size=11)
+        cell.fill = PatternFill("solid", fgColor=DARK_BLUE)
+        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        cell.border = thin_border()
+    ws.row_dimensions[2].height = 24
+
+    # ── صفوف البيانات ──
+    for ri, row in enumerate(df_display.itertuples(index=False), 3):
+        bg = ALT_ROW if ri % 2 == 0 else WHITE
+        fill = PatternFill("solid", fgColor=bg)
+        for ci, val in enumerate(row, 1):
+            cell = ws.cell(row=ri, column=ci, value=val)
+            cell.fill = fill
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+            cell.font = Font(name="Arial", size=10)
+            cell.border = thin_border()
+    last_data_row = 2 + len(df_display)
+
+    # ── صف الإجمالي ──
+    total_row = last_data_row + 1
+    ws.merge_cells(f'A{total_row}:{get_column_letter(max(1, n_cols-1))}{total_row}')
+    label_cell = ws.cell(row=total_row, column=1, value="✦ الإجمالي")
+    label_cell.font = Font(bold=True, color=DARK_BLUE, name="Arial", size=11)
+    label_cell.fill = PatternFill("solid", fgColor=TOTAL_BG)
+    label_cell.alignment = Alignment(horizontal='center', vertical='center')
+
+    if 'المبلغ' in cols:
+        amt_ci = cols.index('المبلغ') + 1
+        # استخدام صيغة SUM
+        total_cell = ws.cell(
+            row=total_row, column=amt_ci,
+            value=f"=SUM({get_column_letter(amt_ci)}3:{get_column_letter(amt_ci)}{last_data_row})"
+        )
+        total_cell.font = Font(bold=True, color=DARK_BLUE, name="Arial", size=11)
+        total_cell.fill = PatternFill("solid", fgColor=TOTAL_BG)
+        total_cell.alignment = Alignment(horizontal='center', vertical='center')
+        total_cell.number_format = '#,##0.00'
+        total_cell.border = thin_border()
+
+    for ci in range(1, n_cols + 1):
+        c = ws.cell(row=total_row, column=ci)
+        if c.value is None:
+            c.fill = PatternFill("solid", fgColor=TOTAL_BG)
+        c.border = thin_border()
+    ws.row_dimensions[total_row].height = 26
+
+    # ── عرض الأعمدة تلقائياً ──
+    col_widths = {"اسم العميل": 28, "client_name": 28, "الفرع": 20, "branch_name": 20}
+    for ci, col in enumerate(cols, 1):
+        w = col_widths.get(col, 18)
+        ws.column_dimensions[get_column_letter(ci)].width = w
+
+    # ── تجميد الرأس ──
+    ws.freeze_panes = "A3"
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def generate_excel_daily(df_display, original_df):
+    """
+    إنشاء Excel متعدد الشيتات - شيت لكل يوم + شيت ملخص
+    df_display: النسخة المعروضة (بالأعمدة المترجمة)
+    original_df: النسخة الأصلية (للتاريخ قبل التحويل لنص)
+    """
+    wb = Workbook()
+    wb.remove(wb.active)  # إزالة الشيت الافتراضي
+
+    DARK_BLUE = "1E3A8A"
+    LIGHT_BLUE = "EFF6FF"
+    ALT_ROW   = "F0F4FF"
+    TOTAL_BG  = "BFDBFE"
+    WHITE     = "FFFFFF"
+    GREEN_BG  = "D1FAE5"
+    GREEN_FG  = "065F46"
+
+    def style_sheet(ws, df_part, title_text):
+        ws.sheet_view.rightToLeft = True
+        cols = list(df_part.columns)
+        n_cols = len(cols)
+        last_col = get_column_letter(n_cols)
+
+        # عنوان
+        ws.merge_cells(f'A1:{last_col}1')
+        tc = ws['A1']
+        tc.value = title_text
+        tc.font = Font(bold=True, size=13, color=DARK_BLUE, name="Arial")
+        tc.fill = PatternFill("solid", fgColor=LIGHT_BLUE)
+        tc.alignment = Alignment(horizontal='center', vertical='center')
+        ws.row_dimensions[1].height = 30
+
+        # رؤوس
+        for ci, h in enumerate(cols, 1):
+            c = ws.cell(row=2, column=ci, value=h)
+            c.font = Font(bold=True, color=WHITE, name="Arial", size=10)
+            c.fill = PatternFill("solid", fgColor=DARK_BLUE)
+            c.alignment = Alignment(horizontal='center', vertical='center')
+            c.border = thin_border()
+        ws.row_dimensions[2].height = 22
+
+        # بيانات
+        for ri, row in enumerate(df_part.itertuples(index=False), 3):
+            bg = ALT_ROW if ri % 2 == 0 else WHITE
+            for ci, val in enumerate(row, 1):
+                c = ws.cell(row=ri, column=ci, value=val)
+                c.fill = PatternFill("solid", fgColor=bg)
+                c.alignment = Alignment(horizontal='center', vertical='center')
+                c.font = Font(name="Arial", size=10)
+                c.border = thin_border()
+        last_data_row = 2 + len(df_part)
+
+        # إجمالي
+        total_row = last_data_row + 1
+        ws.merge_cells(f'A{total_row}:{get_column_letter(max(1,n_cols-1))}{total_row}')
+        lc = ws.cell(row=total_row, column=1, value="✦ الإجمالي")
+        lc.font = Font(bold=True, color=DARK_BLUE, name="Arial")
+        lc.fill = PatternFill("solid", fgColor=TOTAL_BG)
+        lc.alignment = Alignment(horizontal='center', vertical='center')
+        if 'المبلغ' in cols:
+            ac = cols.index('المبلغ') + 1
+            tc2 = ws.cell(row=total_row, column=ac,
+                          value=f"=SUM({get_column_letter(ac)}3:{get_column_letter(ac)}{last_data_row})")
+            tc2.font = Font(bold=True, color=DARK_BLUE, name="Arial")
+            tc2.fill = PatternFill("solid", fgColor=TOTAL_BG)
+            tc2.alignment = Alignment(horizontal='center', vertical='center')
+            tc2.number_format = '#,##0.00'
+            tc2.border = thin_border()
+        for ci in range(1, n_cols + 1):
+            c = ws.cell(row=total_row, column=ci)
+            if c.value is None:
+                c.fill = PatternFill("solid", fgColor=TOTAL_BG)
+            c.border = thin_border()
+        ws.row_dimensions[total_row].height = 24
+        ws.freeze_panes = "A3"
+
+        col_widths = {"اسم العميل": 28, "client_name": 28, "الفرع": 20}
+        for ci, col in enumerate(cols, 1):
+            ws.column_dimensions[get_column_letter(ci)].width = col_widths.get(col, 17)
+
+    # ── شيت الملخص اليومي ──
+    ws_sum = wb.create_sheet("ملخص يومي")
+    ws_sum.sheet_view.rightToLeft = True
+    summary_cols = ["التاريخ", "عدد العمليات", "إجمالي المبلغ (ج.م)"]
+    n_sc = len(summary_cols)
+
+    ws_sum.merge_cells(f'A1:{get_column_letter(n_sc)}1')
+    tc = ws_sum['A1']
+    tc.value = "ملخص يومي - تقرير السدادات"
+    tc.font = Font(bold=True, size=14, color=DARK_BLUE, name="Arial")
+    tc.fill = PatternFill("solid", fgColor=LIGHT_BLUE)
+    tc.alignment = Alignment(horizontal='center', vertical='center')
+    ws_sum.row_dimensions[1].height = 32
+
+    for ci, h in enumerate(summary_cols, 1):
+        c = ws_sum.cell(row=2, column=ci, value=h)
+        c.font = Font(bold=True, color=WHITE, name="Arial")
+        c.fill = PatternFill("solid", fgColor=DARK_BLUE)
+        c.alignment = Alignment(horizontal='center', vertical='center')
+        c.border = thin_border()
+
+    # الأيام المتاحة من original_df
+    temp = original_df.copy()
+    temp['_date'] = temp['تاريخ الدفع'].dt.date
+    dates_sorted = sorted(temp['_date'].dropna().unique())
+
+    for ri, d in enumerate(dates_sorted, 3):
+        day_df = temp[temp['_date'] == d]
+        bg = ALT_ROW if ri % 2 == 0 else WHITE
+        ws_sum.cell(row=ri, column=1, value=str(d)).fill = PatternFill("solid", fgColor=bg)
+        ws_sum.cell(row=ri, column=2, value=len(day_df)).fill = PatternFill("solid", fgColor=bg)
+        ws_sum.cell(row=ri, column=3, value=day_df['المبلغ'].sum()).fill = PatternFill("solid", fgColor=bg)
+        for ci in range(1, n_sc + 1):
+            c = ws_sum.cell(row=ri, column=ci)
+            c.alignment = Alignment(horizontal='center', vertical='center')
+            c.font = Font(name="Arial", size=10)
+            c.border = thin_border()
+        ws_sum.cell(row=ri, column=3).number_format = '#,##0.00'
+
+    # صف الإجمالي في الملخص
+    total_row_sum = 2 + len(dates_sorted) + 1
+    ws_sum.merge_cells(f'A{total_row_sum}:B{total_row_sum}')
+    ws_sum.cell(row=total_row_sum, column=1, value="✦ الإجمالي الكلي").font = Font(bold=True, color=DARK_BLUE, name="Arial")
+    ws_sum.cell(row=total_row_sum, column=1).fill = PatternFill("solid", fgColor=TOTAL_BG)
+    ws_sum.cell(row=total_row_sum, column=1).alignment = Alignment(horizontal='center', vertical='center')
+    total_amt_cell = ws_sum.cell(row=total_row_sum, column=3,
+                                  value=f"=SUM(C3:C{total_row_sum-1})")
+    total_amt_cell.font = Font(bold=True, color=DARK_BLUE, name="Arial")
+    total_amt_cell.fill = PatternFill("solid", fgColor=TOTAL_BG)
+    total_amt_cell.alignment = Alignment(horizontal='center', vertical='center')
+    total_amt_cell.number_format = '#,##0.00'
+    for ci in range(1, n_sc + 1):
+        ws_sum.cell(row=total_row_sum, column=ci).border = thin_border()
+
+    for ci, w in enumerate([18, 18, 25], 1):
+        ws_sum.column_dimensions[get_column_letter(ci)].width = w
+    ws_sum.freeze_panes = "A3"
+
+    # ── شيت لكل يوم ──
+    for d in dates_sorted:
+        day_df_orig = temp[temp['_date'] == d].copy()
+        # نبني display_df لهذا اليوم
+        day_display = day_df_orig.rename(columns={
+            'client_code': 'كود العميل',
+            'client_name': 'اسم العميل',
+            'branch_name': 'الفرع'
+        })
+        if 'تاريخ الدفع' in day_display.columns:
+            day_display['تاريخ الدفع'] = day_display['تاريخ الدفع'].dt.strftime('%Y-%m-%d')
+        day_display = day_display.drop(columns=['_date'], errors='ignore')
+        # إزالة الأعمدة التقنية
+        drop_cols = [c for c in day_display.columns if c.startswith('_') or c == 'id']
+        day_display = day_display.drop(columns=drop_cols, errors='ignore')
+
+        sheet_name = str(d)[:31]
+        ws_day = wb.create_sheet(sheet_name)
+        style_sheet(ws_day, day_display, f"تقرير سدادات يوم {d}")
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def generate_pdf_arabic(df_display, report_title="تقرير السدادات"):
+    """
+    إنشاء PDF بدعم العربي باستخدام reportlab + arabic-reshaper + python-bidi
+    """
+    try:
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib import colors
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+        from reportlab.lib.units import cm
+        import arabic_reshaper
+        from bidi.algorithm import get_display
+        import os
+
+        def ar(text):
+            if not isinstance(text, str):
+                text = str(text) if text is not None else ""
+            reshaped = arabic_reshaper.reshape(text)
+            return get_display(reshaped)
+
+        # تسجيل خط Amiri إن وُجد وإلا استخدم Helvetica
+        font_name = "Helvetica"
+        font_paths = [
+            "/usr/share/fonts/truetype/fonts-hosny-amiri/Amiri-Regular.ttf",
+            "/usr/share/fonts/truetype/arabeyes/ae_AlBattar.ttf",
+            "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf",
+        ]
+        for fp in font_paths:
+            if os.path.exists(fp):
+                try:
+                    pdfmetrics.registerFont(TTFont("ArabicFont", fp))
+                    font_name = "ArabicFont"
+                    break
+                except Exception:
+                    pass
+
+        buf = io.BytesIO()
+        doc = SimpleDocTemplate(
+            buf,
+            pagesize=landscape(A4),
+            rightMargin=1.5*cm, leftMargin=1.5*cm,
+            topMargin=1.5*cm, bottomMargin=1.5*cm
+        )
+
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'ArabicTitle',
+            fontName=font_name,
+            fontSize=16,
+            textColor=colors.HexColor("#1E3A8A"),
+            alignment=1,  # center
+            spaceAfter=12,
+        )
+        date_style = ParagraphStyle(
+            'ArabicDate',
+            fontName=font_name,
+            fontSize=9,
+            textColor=colors.grey,
+            alignment=1,
+        )
+
+        elements = []
+        elements.append(Paragraph(ar(report_title), title_style))
+        elements.append(Paragraph(ar(f"تاريخ الطباعة: {datetime.now().strftime('%Y-%m-%d %H:%M')}"), date_style))
+        elements.append(Spacer(1, 0.4*cm))
+
+        cols = list(df_display.columns)
+        # رأس الجدول (مع عكس الترتيب لأن PDF يبدأ من اليسار)
+        header_row = [ar(c) for c in reversed(cols)]
+        table_data = [header_row]
+
+        for _, row in df_display.iterrows():
+            row_data = [ar(str(v)) if v is not None else "" for v in reversed([row[c] for c in cols])]
+            table_data.append(row_data)
+
+        # صف الإجمالي
+        total_row_data = [""] * len(cols)
+        if 'المبلغ' in cols:
+            amt_idx = cols.index('المبلغ')
+            rev_idx = len(cols) - 1 - amt_idx
+            total_row_data[0] = ar("الإجمالي")
+            total_row_data[rev_idx] = ar(f"{df_display['المبلغ'].sum():,.2f}")
+        table_data.append(total_row_data)
+
+        n_rows = len(table_data)
+        n_cols = len(cols)
+        col_w = (landscape(A4)[0] - 3*cm) / n_cols
+
+        tbl = Table(table_data, colWidths=[col_w]*n_cols, repeatRows=1)
+        tbl.setStyle(TableStyle([
+            # رأس الجدول
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#1E3A8A")),
+            ('TEXTCOLOR',  (0, 0), (-1, 0), colors.white),
+            ('FONTNAME',   (0, 0), (-1, 0), font_name),
+            ('FONTSIZE',   (0, 0), (-1, 0), 9),
+            ('ALIGN',      (0, 0), (-1, 0), 'CENTER'),
+            ('VALIGN',     (0, 0), (-1, -1), 'MIDDLE'),
+            # صفوف البيانات
+            ('FONTNAME',   (0, 1), (-1, -2), font_name),
+            ('FONTSIZE',   (0, 1), (-1, -2), 8),
+            ('ALIGN',      (0, 1), (-1, -2), 'CENTER'),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -2),
+             [colors.HexColor("#FFFFFF"), colors.HexColor("#EFF6FF")]),
+            # صف الإجمالي
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor("#BFDBFE")),
+            ('FONTNAME',   (0, -1), (-1, -1), font_name),
+            ('FONTSIZE',   (0, -1), (-1, -1), 9),
+            ('ALIGN',      (0, -1), (-1, -1), 'CENTER'),
+            ('FONTNAME',   (0, -1), (-1, -1), font_name),
+            # حدود
+            ('GRID',       (0, 0), (-1, -1), 0.5, colors.HexColor("#D1D5DB")),
+            ('LINEBELOW',  (0, 0), (-1, 0), 1.5, colors.HexColor("#1E3A8A")),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+
+        elements.append(tbl)
+        doc.build(elements)
+        return buf.getvalue(), None
+
+    except ImportError as e:
+        return None, f"مكتبة ناقصة: {e}"
+    except Exception as e:
+        return None, str(e)
+
+
+# ===================== واجهة الدخول =====================
+
 if 'user' not in st.session_state:
     st.markdown("<h2 style='text-align: center;'>تسجيل دخول الموظفين</h2>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 1.5, 1])
@@ -94,14 +467,14 @@ if 'user' not in st.session_state:
                 if user:
                     st.session_state['user'] = user
                     st.rerun()
-                else: st.error("خطأ في البيانات")
+                else:
+                    st.error("خطأ في البيانات")
 else:
-    # --- لوحة التحكم ---
+    # ===================== لوحة التحكم =====================
     user = st.session_state['user']
     is_admin = user.get('role') == 'admin'
     user_branches = user.get('branches', [])
 
-    # البحث في الشريط الجانبي (اليمين)
     st.sidebar.markdown(f"<h3 style='text-align:right;'>أهلاً بك: {user['full_name']}</h3>", unsafe_allow_html=True)
     if st.sidebar.button("خروج", use_container_width=True):
         del st.session_state['user']
@@ -111,53 +484,142 @@ else:
     st.sidebar.header("🔍 أدوات البحث")
     s_name = st.sidebar.text_input("بحث باسم العميل")
     s_code = st.sidebar.text_input("بحث بكود العميل")
-    
+
     df_raw = fetch_all_data_paginated()
     if not df_raw.empty:
         df_acc = df_raw if is_admin else df_raw[df_raw['branch_name'].isin(user_branches)]
-        
-        # فلاتر التاريخ والخدمة
+
         v_dates = df_acc['تاريخ الدفع'].dropna()
         start_d = st.sidebar.date_input("من تاريخ", v_dates.min().date())
-        end_d = st.sidebar.date_input("إلى تاريخ", v_dates.max().date())
-        
+        end_d   = st.sidebar.date_input("إلى تاريخ", v_dates.max().date())
+
         codes = ["الكل"] + sorted(df_acc['كود الخدمة'].unique().tolist())
         sel_code = st.sidebar.selectbox("كود الخدمة", codes)
 
-        # تطبيق الفلترة
         mask = (df_acc['تاريخ الدفع'].dt.date >= start_d) & (df_acc['تاريخ الدفع'].dt.date <= end_d)
         if sel_code != "الكل": mask &= (df_acc['كود الخدمة'] == sel_code)
         if s_name: mask &= df_acc['client_name'].astype(str).str.contains(s_name, na=False, case=False)
         if s_code: mask &= df_acc['client_code'].astype(str).str.contains(s_code, na=False, case=False)
-        
+
         final_df = df_acc.loc[mask]
 
-        # --- العرض الرئيسي ---
+        # ── العرض الرئيسي ──
         st.markdown('<div class="main-title"><h1>📑 استعراض تقارير السدادات</h1></div>', unsafe_allow_html=True)
 
-        # المربعات العلوية
         col1, col2, col3 = st.columns(3)
         with col1:
             st.markdown(f"""<div class="metric-card"><div class="metric-label">إجمالي المبالغ</div>
-                        <div class="metric-value">{final_df['المبلغ'].sum():,.2f} ج.م</div></div>""", unsafe_allow_html=True)
+                        <div class="metric-value">{final_df['المبلغ'].sum():,.2f} ج.م</div></div>""",
+                        unsafe_allow_html=True)
         with col2:
             st.markdown(f"""<div class="metric-card"><div class="metric-label">عدد العمليات</div>
-                        <div class="metric-value">{len(final_df)} حركة</div></div>""", unsafe_allow_html=True)
+                        <div class="metric-value">{len(final_df)} حركة</div></div>""",
+                        unsafe_allow_html=True)
         with col3:
             counts = final_df['كود الخدمة'].value_counts()
             codes_html = "".join([f"<div>{k}: {v}</div>" for k, v in counts.items()])
             st.markdown(f"""<div class="metric-card"><div class="metric-label">تفاصيل الأكواد</div>
-                        <div style="font-weight:bold; color:#1e3a8a;">{codes_html}</div></div>""", unsafe_allow_html=True)
+                        <div style="font-weight:bold; color:#1e3a8a;">{codes_html}</div></div>""",
+                        unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
-        
-        # الجدول
-        display_df = final_df.copy().rename(columns={'client_code': 'كود العميل', 'client_name': 'اسم العميل', 'branch_name': 'الفرع'})
+
+        # ── ملخص يومي في الصفحة الرئيسية ──
+        with st.expander("📅 عرض الملخص اليومي", expanded=False):
+            daily_summary = (
+                final_df.groupby(final_df['تاريخ الدفع'].dt.date)
+                .agg(عدد_العمليات=('المبلغ', 'count'), إجمالي_المبلغ=('المبلغ', 'sum'))
+                .reset_index()
+            )
+            daily_summary.columns = ['التاريخ', 'عدد العمليات', 'إجمالي المبلغ (ج.م)']
+            st.dataframe(daily_summary, use_container_width=True, hide_index=True)
+
+        # ── الجدول الرئيسي ──
+        display_df = final_df.copy().rename(columns={
+            'client_code': 'كود العميل',
+            'client_name': 'اسم العميل',
+            'branch_name': 'الفرع'
+        })
+        drop_cols = [c for c in display_df.columns if c.startswith('_') or c == 'id']
+        display_df = display_df.drop(columns=drop_cols, errors='ignore')
         if 'تاريخ الدفع' in display_df.columns:
             display_df['تاريخ الدفع'] = display_df['تاريخ الدفع'].dt.strftime('%Y-%m-%d')
-        
-        st.dataframe(display_df, use_container_width=True)
 
-        # تحميل
-        csv = final_df.to_csv(index=False).encode('utf-8-sig')
-        st.sidebar.download_button("📥 تحميل التقرير (Excel)", csv, f"Report_{datetime.now().date()}.csv", use_container_width=True)
+        st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+        # ===================== قسم التحميل في الشريط الجانبي =====================
+        st.sidebar.divider()
+        st.sidebar.header("📥 تحميل التقرير")
+
+        # --- اختيار نوع التقسيم ---
+        split_mode = st.sidebar.radio(
+            "نوع التنزيل",
+            ["كل البيانات في شيت واحد", "تقسيم يوم يوم (شيت لكل يوم)"],
+            index=0
+        )
+
+        if split_mode == "تقسيم يوم يوم (شيت لكل يوم)":
+            # --- اختيار يوم أو كل الأيام ---
+            available_dates = sorted(final_df['تاريخ الدفع'].dropna().dt.date.unique())
+            date_options = ["كل الأيام"] + [str(d) for d in available_dates]
+            selected_day = st.sidebar.selectbox("اختر اليوم للتنزيل", date_options)
+
+            if selected_day == "كل الأيام":
+                # Excel متعدد الشيتات (شيت لكل يوم + ملخص)
+                excel_bytes = generate_excel_daily(display_df, final_df)
+                file_label = f"تقرير_كل_الأيام_{datetime.now().date()}.xlsx"
+            else:
+                # فلترة بيوم معين وشيت واحد
+                sel_date = pd.to_datetime(selected_day).date()
+                day_display = display_df[
+                    pd.to_datetime(display_df['تاريخ الدفع'], errors='coerce').dt.date == sel_date
+                ]
+                excel_bytes = generate_excel_single(
+                    day_display,
+                    sheet_title=selected_day,
+                    report_title=f"تقرير سدادات يوم {selected_day}"
+                )
+                file_label = f"تقرير_{selected_day}.xlsx"
+
+        else:
+            excel_bytes = generate_excel_single(
+                display_df,
+                report_title=f"تقرير السدادات - {start_d} إلى {end_d}"
+            )
+            file_label = f"تقرير_{datetime.now().date()}.xlsx"
+
+        # زر تنزيل Excel
+        st.sidebar.download_button(
+            label="📊 تحميل Excel ملون",
+            data=excel_bytes,
+            file_name=file_label,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+
+        # --- زر تنزيل PDF ---
+        st.sidebar.markdown("---")
+        if st.sidebar.button("🖨️ تجهيز PDF", use_container_width=True):
+            with st.spinner("جاري إنشاء ملف PDF..."):
+                pdf_title = f"تقرير السدادات - {start_d} إلى {end_d}"
+                if split_mode == "تقسيم يوم يوم (شيت لكل يوم)" and selected_day != "كل الأيام":
+                    pdf_df = display_df[
+                        pd.to_datetime(display_df['تاريخ الدفع'], errors='coerce').dt.date == sel_date
+                    ]
+                    pdf_title = f"تقرير سدادات يوم {selected_day}"
+                else:
+                    pdf_df = display_df
+
+                pdf_bytes, err = generate_pdf_arabic(pdf_df, pdf_title)
+
+                if err:
+                    st.sidebar.error(f"تعذّر إنشاء PDF: {err}")
+                    st.sidebar.info("تأكد من تثبيت: pip install reportlab arabic-reshaper python-bidi")
+                else:
+                    st.sidebar.download_button(
+                        label="⬇️ تحميل PDF",
+                        data=pdf_bytes,
+                        file_name=f"تقرير_{datetime.now().date()}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
