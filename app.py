@@ -74,6 +74,32 @@ def thin_border():
     s = Side(border_style="thin", color="D1D5DB")
     return Border(left=s, right=s, top=s, bottom=s)
 
+def write_total_row(ws, total_row, cols, last_data_row):
+    """كتابة صف الإجمالي بدون merge لتفادي مشكلة openpyxl"""
+    DARK_BLUE = "1E3A8A"
+    TOTAL_BG  = "BFDBFE"
+    n_cols = len(cols)
+
+    # أولاً: لون وتنسيق كل الخلايا
+    for ci in range(1, n_cols + 1):
+        c = ws.cell(row=total_row, column=ci)
+        c.fill = PatternFill("solid", fgColor=TOTAL_BG)
+        c.border = thin_border()
+        c.alignment = Alignment(horizontal='center', vertical='center')
+        c.font = Font(bold=True, color=DARK_BLUE, name="Arial", size=11)
+
+    # ثانياً: كتابة القيم
+    ws.cell(row=total_row, column=1).value = "✦ الإجمالي"
+
+    if 'المبلغ' in cols:
+        amt_ci = cols.index('المبلغ') + 1
+        col_letter = get_column_letter(amt_ci)
+        ws.cell(row=total_row, column=amt_ci).value = f"=SUM({col_letter}3:{col_letter}{last_data_row})"
+        ws.cell(row=total_row, column=amt_ci).number_format = '#,##0.00'
+
+    ws.row_dimensions[total_row].height = 26
+
+
 def generate_excel_single(df_display, sheet_title="التقرير", report_title="تقرير السدادات"):
     wb = Workbook()
     ws = wb.active
@@ -83,81 +109,49 @@ def generate_excel_single(df_display, sheet_title="التقرير", report_title
     DARK_BLUE  = "1E3A8A"
     LIGHT_BLUE = "EFF6FF"
     ALT_ROW    = "F0F4FF"
-    TOTAL_BG   = "BFDBFE"
     WHITE      = "FFFFFF"
 
     cols = list(df_display.columns)
     n_cols = len(cols)
     last_col = get_column_letter(n_cols)
 
-    # ── صف العنوان ──
+    # صف العنوان
     ws.merge_cells(f'A1:{last_col}1')
-    tc = ws['A1']
-    tc.value = report_title
-    tc.font = Font(bold=True, size=14, color=DARK_BLUE, name="Arial")
-    tc.fill = PatternFill("solid", fgColor=LIGHT_BLUE)
-    tc.alignment = Alignment(horizontal='center', vertical='center')
+    ws['A1'].value = report_title
+    ws['A1'].font = Font(bold=True, size=14, color=DARK_BLUE, name="Arial")
+    ws['A1'].fill = PatternFill("solid", fgColor=LIGHT_BLUE)
+    ws['A1'].alignment = Alignment(horizontal='center', vertical='center')
     ws.row_dimensions[1].height = 32
 
-    # ── صف الرؤوس ──
+    # صف الرؤوس
     for ci, header in enumerate(cols, 1):
-        cell = ws.cell(row=2, column=ci, value=header)
-        cell.font = Font(bold=True, color=WHITE, name="Arial", size=11)
-        cell.fill = PatternFill("solid", fgColor=DARK_BLUE)
-        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-        cell.border = thin_border()
+        c = ws.cell(row=2, column=ci, value=header)
+        c.font = Font(bold=True, color=WHITE, name="Arial", size=11)
+        c.fill = PatternFill("solid", fgColor=DARK_BLUE)
+        c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        c.border = thin_border()
     ws.row_dimensions[2].height = 24
 
-    # ── صفوف البيانات ──
+    # صفوف البيانات
     for ri, row in enumerate(df_display.itertuples(index=False), 3):
         bg = ALT_ROW if ri % 2 == 0 else WHITE
-        fill = PatternFill("solid", fgColor=bg)
         for ci, val in enumerate(row, 1):
-            cell = ws.cell(row=ri, column=ci, value=val)
-            cell.fill = fill
-            cell.alignment = Alignment(horizontal='center', vertical='center')
-            cell.font = Font(name="Arial", size=10)
-            cell.border = thin_border()
+            c = ws.cell(row=ri, column=ci, value=val)
+            c.fill = PatternFill("solid", fgColor=bg)
+            c.alignment = Alignment(horizontal='center', vertical='center')
+            c.font = Font(name="Arial", size=10)
+            c.border = thin_border()
     last_data_row = 2 + len(df_display)
 
-    # ── صف الإجمالي ──
-    total_row = last_data_row + 1
+    # صف الإجمالي
+    write_total_row(ws, last_data_row + 1, cols, last_data_row)
 
-    # كتابة القيمة أولاً ثم الدمج
-    label_cell = ws.cell(row=total_row, column=1, value="✦ الإجمالي")
-    label_cell.font = Font(bold=True, color=DARK_BLUE, name="Arial", size=11)
-    label_cell.fill = PatternFill("solid", fgColor=TOTAL_BG)
-    label_cell.alignment = Alignment(horizontal='center', vertical='center')
-
-    if n_cols > 1:
-        ws.merge_cells(f'A{total_row}:{get_column_letter(max(1, n_cols-1))}{total_row}')
-
-    if 'المبلغ' in cols:
-        amt_ci = cols.index('المبلغ') + 1
-        total_cell = ws.cell(
-            row=total_row, column=amt_ci,
-            value=f"=SUM({get_column_letter(amt_ci)}3:{get_column_letter(amt_ci)}{last_data_row})"
-        )
-        total_cell.font = Font(bold=True, color=DARK_BLUE, name="Arial", size=11)
-        total_cell.fill = PatternFill("solid", fgColor=TOTAL_BG)
-        total_cell.alignment = Alignment(horizontal='center', vertical='center')
-        total_cell.number_format = '#,##0.00'
-        total_cell.border = thin_border()
-
-    for ci in range(1, n_cols + 1):
-        c = ws.cell(row=total_row, column=ci)
-        if c.value is None:
-            c.fill = PatternFill("solid", fgColor=TOTAL_BG)
-        c.border = thin_border()
-    ws.row_dimensions[total_row].height = 26
-
-    # ── عرض الأعمدة ──
-    col_widths = {"اسم العميل": 28, "client_name": 28, "الفرع": 20, "branch_name": 20}
+    # عرض الأعمدة
+    col_widths = {"اسم العميل": 28, "الفرع": 20}
     for ci, col in enumerate(cols, 1):
         ws.column_dimensions[get_column_letter(ci)].width = col_widths.get(col, 18)
 
     ws.freeze_panes = "A3"
-
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
@@ -181,11 +175,10 @@ def generate_excel_daily(df_display, original_df):
 
         # عنوان
         ws.merge_cells(f'A1:{last_col}1')
-        tc = ws['A1']
-        tc.value = title_text
-        tc.font = Font(bold=True, size=13, color=DARK_BLUE, name="Arial")
-        tc.fill = PatternFill("solid", fgColor=LIGHT_BLUE)
-        tc.alignment = Alignment(horizontal='center', vertical='center')
+        ws['A1'].value = title_text
+        ws['A1'].font = Font(bold=True, size=13, color=DARK_BLUE, name="Arial")
+        ws['A1'].fill = PatternFill("solid", fgColor=LIGHT_BLUE)
+        ws['A1'].alignment = Alignment(horizontal='center', vertical='center')
         ws.row_dimensions[1].height = 30
 
         # رؤوس
@@ -208,52 +201,25 @@ def generate_excel_daily(df_display, original_df):
                 c.border = thin_border()
         last_data_row = 2 + len(df_part)
 
-        # إجمالي - كتابة القيمة أولاً ثم الدمج
-        total_row = last_data_row + 1
-        lc = ws.cell(row=total_row, column=1, value="✦ الإجمالي")
-        lc.font = Font(bold=True, color=DARK_BLUE, name="Arial")
-        lc.fill = PatternFill("solid", fgColor=TOTAL_BG)
-        lc.alignment = Alignment(horizontal='center', vertical='center')
+        # صف الإجمالي
+        write_total_row(ws, last_data_row + 1, cols, last_data_row)
 
-        if n_cols > 1:
-            ws.merge_cells(f'A{total_row}:{get_column_letter(max(1, n_cols-1))}{total_row}')
-
-        if 'المبلغ' in cols:
-            ac = cols.index('المبلغ') + 1
-            tc2 = ws.cell(
-                row=total_row, column=ac,
-                value=f"=SUM({get_column_letter(ac)}3:{get_column_letter(ac)}{last_data_row})"
-            )
-            tc2.font = Font(bold=True, color=DARK_BLUE, name="Arial")
-            tc2.fill = PatternFill("solid", fgColor=TOTAL_BG)
-            tc2.alignment = Alignment(horizontal='center', vertical='center')
-            tc2.number_format = '#,##0.00'
-            tc2.border = thin_border()
-
-        for ci in range(1, n_cols + 1):
-            c = ws.cell(row=total_row, column=ci)
-            if c.value is None:
-                c.fill = PatternFill("solid", fgColor=TOTAL_BG)
-            c.border = thin_border()
-        ws.row_dimensions[total_row].height = 24
         ws.freeze_panes = "A3"
-
-        col_widths = {"اسم العميل": 28, "client_name": 28, "الفرع": 20}
+        col_widths = {"اسم العميل": 28, "الفرع": 20}
         for ci, col in enumerate(cols, 1):
             ws.column_dimensions[get_column_letter(ci)].width = col_widths.get(col, 17)
 
-    # ── شيت الملخص اليومي ──
+    # شيت الملخص اليومي
     ws_sum = wb.create_sheet("ملخص يومي")
     ws_sum.sheet_view.rightToLeft = True
     summary_cols = ["التاريخ", "عدد العمليات", "إجمالي المبلغ (ج.م)"]
     n_sc = len(summary_cols)
 
     ws_sum.merge_cells(f'A1:{get_column_letter(n_sc)}1')
-    tc = ws_sum['A1']
-    tc.value = "ملخص يومي - تقرير السدادات"
-    tc.font = Font(bold=True, size=14, color=DARK_BLUE, name="Arial")
-    tc.fill = PatternFill("solid", fgColor=LIGHT_BLUE)
-    tc.alignment = Alignment(horizontal='center', vertical='center')
+    ws_sum['A1'].value = "ملخص يومي - تقرير السدادات"
+    ws_sum['A1'].font = Font(bold=True, size=14, color=DARK_BLUE, name="Arial")
+    ws_sum['A1'].fill = PatternFill("solid", fgColor=LIGHT_BLUE)
+    ws_sum['A1'].alignment = Alignment(horizontal='center', vertical='center')
     ws_sum.row_dimensions[1].height = 32
 
     for ci, h in enumerate(summary_cols, 1):
@@ -262,6 +228,7 @@ def generate_excel_daily(df_display, original_df):
         c.fill = PatternFill("solid", fgColor=DARK_BLUE)
         c.alignment = Alignment(horizontal='center', vertical='center')
         c.border = thin_border()
+    ws_sum.row_dimensions[2].height = 22
 
     temp = original_df.copy()
     temp['_date'] = temp['تاريخ الدفع'].dt.date
@@ -278,35 +245,28 @@ def generate_excel_daily(df_display, original_df):
             c.border = thin_border()
         ws_sum.cell(row=ri, column=1).value = str(d)
         ws_sum.cell(row=ri, column=2).value = len(day_df)
-        ws_sum.cell(row=ri, column=3).value = day_df['المبلغ'].sum()
+        ws_sum.cell(row=ri, column=3).value = float(day_df['المبلغ'].sum())
         ws_sum.cell(row=ri, column=3).number_format = '#,##0.00'
 
-    # صف الإجمالي في الملخص - كتابة القيمة أولاً ثم الدمج
+    # صف الإجمالي في الملخص (بدون merge)
     total_row_sum = 2 + len(dates_sorted) + 1
-    lc_sum = ws_sum.cell(row=total_row_sum, column=1, value="✦ الإجمالي الكلي")
-    lc_sum.font = Font(bold=True, color=DARK_BLUE, name="Arial")
-    lc_sum.fill = PatternFill("solid", fgColor=TOTAL_BG)
-    lc_sum.alignment = Alignment(horizontal='center', vertical='center')
-
-    ws_sum.merge_cells(f'A{total_row_sum}:B{total_row_sum}')
-
-    total_amt_cell = ws_sum.cell(
-        row=total_row_sum, column=3,
-        value=f"=SUM(C3:C{total_row_sum-1})"
-    )
-    total_amt_cell.font = Font(bold=True, color=DARK_BLUE, name="Arial")
-    total_amt_cell.fill = PatternFill("solid", fgColor=TOTAL_BG)
-    total_amt_cell.alignment = Alignment(horizontal='center', vertical='center')
-    total_amt_cell.number_format = '#,##0.00'
-
     for ci in range(1, n_sc + 1):
-        ws_sum.cell(row=total_row_sum, column=ci).border = thin_border()
+        c = ws_sum.cell(row=total_row_sum, column=ci)
+        c.fill = PatternFill("solid", fgColor=TOTAL_BG)
+        c.border = thin_border()
+        c.alignment = Alignment(horizontal='center', vertical='center')
+        c.font = Font(bold=True, color=DARK_BLUE, name="Arial")
+
+    ws_sum.cell(row=total_row_sum, column=1).value = "✦ الإجمالي الكلي"
+    ws_sum.cell(row=total_row_sum, column=3).value = f"=SUM(C3:C{total_row_sum - 1})"
+    ws_sum.cell(row=total_row_sum, column=3).number_format = '#,##0.00'
+    ws_sum.row_dimensions[total_row_sum].height = 26
 
     for ci, w in enumerate([18, 18, 25], 1):
         ws_sum.column_dimensions[get_column_letter(ci)].width = w
     ws_sum.freeze_panes = "A3"
 
-    # ── شيت لكل يوم ──
+    # شيت لكل يوم
     for d in dates_sorted:
         day_df_orig = temp[temp['_date'] == d].copy()
         day_display = day_df_orig.rename(columns={
@@ -319,8 +279,7 @@ def generate_excel_daily(df_display, original_df):
         drop_cols = [c for c in day_display.columns if c.startswith('_') or c == 'id']
         day_display = day_display.drop(columns=drop_cols, errors='ignore')
 
-        sheet_name = str(d)[:31]
-        ws_day = wb.create_sheet(sheet_name)
+        ws_day = wb.create_sheet(str(d)[:31])
         style_sheet(ws_day, day_display, f"تقرير سدادات يوم {d}")
 
     buf = io.BytesIO()
@@ -381,7 +340,7 @@ else:
 
         final_df = df_acc.loc[mask]
 
-        # ── العرض الرئيسي ──
+        # العرض الرئيسي
         st.markdown('<div class="main-title"><h1>📑 استعراض تقارير السدادات</h1></div>', unsafe_allow_html=True)
 
         col1, col2, col3 = st.columns(3)
@@ -402,7 +361,7 @@ else:
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # ── ملخص يومي ──
+        # ملخص يومي
         with st.expander("📅 عرض الملخص اليومي", expanded=False):
             daily_summary = (
                 final_df.groupby(final_df['تاريخ الدفع'].dt.date)
@@ -412,7 +371,7 @@ else:
             daily_summary.columns = ['التاريخ', 'عدد العمليات', 'إجمالي المبلغ (ج.م)']
             st.dataframe(daily_summary, use_container_width=True, hide_index=True)
 
-        # ── الجدول الرئيسي ──
+        # الجدول الرئيسي
         display_df = final_df.copy().rename(columns={
             'client_code': 'كود العميل',
             'client_name': 'اسم العميل',
@@ -425,7 +384,7 @@ else:
 
         st.dataframe(display_df, use_container_width=True, hide_index=True)
 
-        # ===================== قسم التحميل =====================
+        # قسم التحميل
         st.sidebar.divider()
         st.sidebar.header("📥 تحميل التقرير")
 
