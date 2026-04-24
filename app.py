@@ -4,6 +4,7 @@ from supabase import create_client
 from datetime import datetime
 import io
 import os
+import base64
 from pathlib import Path
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
@@ -14,21 +15,12 @@ st.set_page_config(page_title="نظام كاريتاس", layout="wide", page_ico
 
 # ===================== الثوابت والتكوين =====================
 
-# محاولة إيجاد اللوجو بطرق مختلفة
+# مسار اللوجو
 def get_logo_path():
-    """البحث عن ملف اللوجو في مسارات مختلفة"""
-    possible_paths = [
-        "logo.png",
-        "images/logo.png",
-        "static/logo.png",
-        "assets/logo.png",
-        Path(__file__).parent / "logo.png",
-        Path(__file__).parent / "images" / "logo.png",
-    ]
-    
+    possible_paths = ["logo.png", "images/logo.png", "static/logo.png", "assets/logo.png"]
     for path in possible_paths:
-        if os.path.exists(str(path)):
-            return str(path)
+        if os.path.exists(path):
+            return path
     return None
 
 LOGO_PATH = get_logo_path()
@@ -39,10 +31,17 @@ PROGRAMS = {
         "reports": {
             "name": "سداد فوري & Opay",
             "icon": "💳📱",
+            "icon_image": "sadad_opay",
             "page_title": "تقرير السدادات",
             "description": "عرض وتحليل بيانات السدادات - تقارير دقيقة ومتنوعة",
-            "function": "reports_page"
         },
+        "installments": {
+            "name": "الأقساط المستحقة",
+            "icon": "📋💰",
+            "icon_image": "installments",
+            "page_title": "تقرير الأقساط المستحقة",
+            "description": "عرض الأقساط المستحقة مع بيانات الدفع من فوري و Opay",
+        }
     },
     "inactive": {
         "service_1": {"name": "تحت الإنشاء", "icon": "🏦"},
@@ -66,17 +65,13 @@ PROGRAMS = {
     }
 }
 
-# ===================== دالة عرض اللوجو المحسنة (تظهر في كل الصفحات) =====================
+# ===================== دالة عرض اللوجو =====================
 
 def show_logo():
-    """عرض اللوجو بشكل ثابت في أعلى يسار جميع الصفحات"""
-    
-    # استخدام base64 لعرض الصورة بشكل أفضل
+    """عرض اللوجو في أعلى يسار الصفحة"""
     if LOGO_PATH and os.path.exists(LOGO_PATH):
-        import base64
         with open(LOGO_PATH, "rb") as f:
             img_data = base64.b64encode(f.read()).decode()
-        
         st.markdown(f"""
             <div style="position: fixed; top: 15px; left: 15px; z-index: 9999; background: rgba(255,255,255,0.95); 
                         padding: 5px 10px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
@@ -84,7 +79,6 @@ def show_logo():
             </div>
         """, unsafe_allow_html=True)
     else:
-        # نص بديل إذا لم يوجد اللوجو
         st.markdown("""
             <div style="position: fixed; top: 15px; left: 15px; z-index: 9999; background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); 
                         padding: 8px 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
@@ -92,39 +86,21 @@ def show_logo():
             </div>
         """, unsafe_allow_html=True)
 
-# ===================== دالة عرض الهيدر الموحد =====================
-
-def show_unified_header(page_title, description, show_back_button=True):
-    """عرض هيدر موحد لجميع الصفحات"""
-    
-    # اللوجو يظهر تلقائياً من الدالة المنفصلة
-    st.markdown(f"""
-        <div style="margin-top: 70px;">
-            <div class="main-title">
-                <h1>{page_title}</h1>
-                <p>{description}</p>
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    if show_back_button and st.session_state.get('user'):
-        col1, col2, col3 = st.columns([1, 4, 1])
-        with col2:
-            if st.button("🏠 العودة للرئيسية", use_container_width=True):
-                st.query_params.clear()
-                st.rerun()
-        st.divider()
-
 # ===================== الاتصال بـ Supabase =====================
 
 URL = st.secrets["SUPABASE_URL"]
 KEY = st.secrets["SUPABASE_KEY"]
 supabase = create_client(URL, KEY)
 
-# ===================== الوظائف المشتركة =====================
+def check_login(u, p):
+    """التحقق من بيانات الدخول"""
+    res = supabase.table("app_users").select("*").eq("id", u).eq("password_hash", p).execute()
+    return res.data[0] if res.data else None
 
-def fetch_all_data_paginated():
-    """جلب جميع البيانات من Supabase"""
+# ===================== دوال جلب البيانات =====================
+
+def fetch_reports_data():
+    """جلب بيانات تقارير السدادات"""
     all_data = []
     limit, offset = 1000, 0
     while True:
@@ -140,10 +116,22 @@ def fetch_all_data_paginated():
         df['تاريخ الدفع'] = pd.to_datetime(df['تاريخ الدفع'], dayfirst=True, errors='coerce')
     return df
 
-def check_login(u, p):
-    """التحقق من بيانات الدخول"""
-    res = supabase.table("app_users").select("*").eq("id", u).eq("password_hash", p).execute()
-    return res.data[0] if res.data else None
+def fetch_outstanding_data():
+    """جلب بيانات الأقساط المستحقة من الـ View"""
+    all_data = []
+    limit, offset = 1000, 0
+    while True:
+        res = supabase.table("outstanding_with_payments").select("*").range(offset, offset + limit - 1).execute()
+        if not res.data:
+            break
+        all_data.extend(res.data)
+        if len(res.data) < limit:
+            break
+        offset += limit
+    df = pd.DataFrame(all_data)
+    return df
+
+# ===================== دوال توليد Excel =====================
 
 def thin_border():
     s = Side(border_style="thin", color="D1D5DB")
@@ -172,17 +160,78 @@ def write_total_row(ws, total_row, cols, last_data_row):
 
     ws.row_dimensions[total_row].height = 26
 
-def generate_excel_single(df_display, sheet_title="التقرير", report_title="تقرير السدادات"):
-    """توليد ملف Excel لشيت واحد"""
+def generate_outstanding_excel(df, title="تقرير الأقساط المستحقة"):
+    """توليد ملف Excel لتقرير الأقساط المستحقة مع تنسيق ملون"""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "الأقساط المستحقة"
+    ws.sheet_view.rightToLeft = True
+
+    # تحضير الأعمدة
+    cols = list(df.columns)
+    n_cols = len(cols)
+    last_col = get_column_letter(n_cols)
+
+    # عنوان رئيسي
+    ws.merge_cells(f'A1:{last_col}1')
+    ws['A1'].value = title
+    ws['A1'].font = Font(bold=True, size=16, color="1E3A8A", name="Arial")
+    ws['A1'].fill = PatternFill("solid", fgColor="EFF6FF")
+    ws['A1'].alignment = Alignment(horizontal='center', vertical='center')
+    ws.row_dimensions[1].height = 35
+
+    # الرؤوس
+    headers = ['اسم المسؤول', 'كود الفرع', 'اسم الفرع', 'تاريخ استحقاق القسط', 'تاريخ حالة القسط',
+               'كود العميل', 'اسم العميل', 'الرقم القومي', 'رقم القرض', 'حالة القسط', 'قيمة القسط',
+               'نوع الفاتورة', 'تاريخ التحويل', 'وقت التحويل', 'مبلغ فوري', 'رقم حساب الفوترة',
+               'رقم تحويل فوري', 'الرقم المرجعي', 'مبلغ Opay', 'تاريخ الدفع Opay', 'وقت الدفع Opay']
+    
+    for ci, header in enumerate(headers[:len(cols)], 1):
+        c = ws.cell(row=2, column=ci, value=header)
+        c.font = Font(bold=True, color="FFFFFF", name="Arial", size=11)
+        c.fill = PatternFill("solid", fgColor="1E3A8A")
+        c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        c.border = thin_border()
+    ws.row_dimensions[2].height = 30
+
+    # البيانات مع التلوين
+    for ri, row in enumerate(df.itertuples(index=False), 3):
+        for ci, val in enumerate(row, 1):
+            c = ws.cell(row=ri, column=ci, value=val)
+            c.alignment = Alignment(horizontal='center', vertical='center')
+            c.font = Font(name="Arial", size=10)
+            c.border = thin_border()
+            
+            # تلوين حسب حالة القسط
+            status = str(row[9]) if len(row) > 9 else ""
+            if "مسدد جزئي" in status:
+                c.fill = PatternFill("solid", fgColor="FFCCCC")
+                c.font = Font(color="9C0006", bold=True)
+            elif "غير مدفوع" in status or status == "":
+                c.fill = PatternFill("solid", fgColor="FFE699")
+                c.font = Font(color="7F4A00")
+            else:
+                c.fill = PatternFill("solid", fgColor="E2EFDA")
+                c.font = Font(color="375623")
+    
+    # ضبط عرض الأعمدة
+    col_widths = {'اسم العميل': 25, 'اسم الفرع': 20, 'اسم المسؤول': 18, 'الرقم القومي': 15}
+    for ci, col in enumerate(headers[:len(cols)], 1):
+        width = col_widths.get(col, 15)
+        ws.column_dimensions[get_column_letter(ci)].width = width
+
+    ws.freeze_panes = "A3"
+    
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+def generate_reports_excel_single(df_display, sheet_title="التقرير", report_title="تقرير السدادات"):
+    """توليد ملف Excel لتقارير السدادات"""
     wb = Workbook()
     ws = wb.active
     ws.title = sheet_title[:31]
     ws.sheet_view.rightToLeft = True
-
-    DARK_BLUE  = "1E3A8A"
-    LIGHT_BLUE = "EFF6FF"
-    ALT_ROW    = "F0F4FF"
-    WHITE      = "FFFFFF"
 
     cols = list(df_display.columns)
     n_cols = len(cols)
@@ -190,21 +239,21 @@ def generate_excel_single(df_display, sheet_title="التقرير", report_title
 
     ws.merge_cells(f'A1:{last_col}1')
     ws['A1'].value = report_title
-    ws['A1'].font = Font(bold=True, size=14, color=DARK_BLUE, name="Arial")
-    ws['A1'].fill = PatternFill("solid", fgColor=LIGHT_BLUE)
+    ws['A1'].font = Font(bold=True, size=14, color="1E3A8A", name="Arial")
+    ws['A1'].fill = PatternFill("solid", fgColor="EFF6FF")
     ws['A1'].alignment = Alignment(horizontal='center', vertical='center')
     ws.row_dimensions[1].height = 32
 
     for ci, header in enumerate(cols, 1):
         c = ws.cell(row=2, column=ci, value=header)
-        c.font = Font(bold=True, color=WHITE, name="Arial", size=11)
-        c.fill = PatternFill("solid", fgColor=DARK_BLUE)
+        c.font = Font(bold=True, color="FFFFFF", name="Arial", size=11)
+        c.fill = PatternFill("solid", fgColor="1E3A8A")
         c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
         c.border = thin_border()
     ws.row_dimensions[2].height = 24
 
     for ri, row in enumerate(df_display.itertuples(index=False), 3):
-        bg = ALT_ROW if ri % 2 == 0 else WHITE
+        bg = "F0F4FF" if ri % 2 == 0 else "FFFFFF"
         for ci, val in enumerate(row, 1):
             c = ws.cell(row=ri, column=ci, value=val)
             c.fill = PatternFill("solid", fgColor=bg)
@@ -224,130 +273,7 @@ def generate_excel_single(df_display, sheet_title="التقرير", report_title
     wb.save(buf)
     return buf.getvalue()
 
-def generate_excel_daily(df_display, original_df):
-    """توليد ملف Excel مقسم حسب الأيام"""
-    wb = Workbook()
-    wb.remove(wb.active)
-
-    DARK_BLUE  = "1E3A8A"
-    LIGHT_BLUE = "EFF6FF"
-    ALT_ROW    = "F0F4FF"
-    TOTAL_BG   = "BFDBFE"
-    WHITE      = "FFFFFF"
-
-    def style_sheet(ws, df_part, title_text):
-        ws.sheet_view.rightToLeft = True
-        cols = list(df_part.columns)
-        n_cols = len(cols)
-        last_col = get_column_letter(n_cols)
-
-        ws.merge_cells(f'A1:{last_col}1')
-        ws['A1'].value = title_text
-        ws['A1'].font = Font(bold=True, size=13, color=DARK_BLUE, name="Arial")
-        ws['A1'].fill = PatternFill("solid", fgColor=LIGHT_BLUE)
-        ws['A1'].alignment = Alignment(horizontal='center', vertical='center')
-        ws.row_dimensions[1].height = 30
-
-        for ci, h in enumerate(cols, 1):
-            c = ws.cell(row=2, column=ci, value=h)
-            c.font = Font(bold=True, color=WHITE, name="Arial", size=10)
-            c.fill = PatternFill("solid", fgColor=DARK_BLUE)
-            c.alignment = Alignment(horizontal='center', vertical='center')
-            c.border = thin_border()
-        ws.row_dimensions[2].height = 22
-
-        for ri, row in enumerate(df_part.itertuples(index=False), 3):
-            bg = ALT_ROW if ri % 2 == 0 else WHITE
-            for ci, val in enumerate(row, 1):
-                c = ws.cell(row=ri, column=ci, value=val)
-                c.fill = PatternFill("solid", fgColor=bg)
-                c.alignment = Alignment(horizontal='center', vertical='center')
-                c.font = Font(name="Arial", size=10)
-                c.border = thin_border()
-        last_data_row = 2 + len(df_part)
-
-        write_total_row(ws, last_data_row + 1, cols, last_data_row)
-
-        ws.freeze_panes = "A3"
-        col_widths = {"اسم العميل": 28, "الفرع": 20}
-        for ci, col in enumerate(cols, 1):
-            ws.column_dimensions[get_column_letter(ci)].width = col_widths.get(col, 17)
-
-    ws_sum = wb.create_sheet("ملخص يومي")
-    ws_sum.sheet_view.rightToLeft = True
-    summary_cols = ["التاريخ", "عدد العمليات", "إجمالي المبلغ (ج.م)"]
-    n_sc = len(summary_cols)
-
-    ws_sum.merge_cells(f'A1:{get_column_letter(n_sc)}1')
-    ws_sum['A1'].value = "ملخص يومي - تقرير السدادات"
-    ws_sum['A1'].font = Font(bold=True, size=14, color=DARK_BLUE, name="Arial")
-    ws_sum['A1'].fill = PatternFill("solid", fgColor=LIGHT_BLUE)
-    ws_sum['A1'].alignment = Alignment(horizontal='center', vertical='center')
-    ws_sum.row_dimensions[1].height = 32
-
-    for ci, h in enumerate(summary_cols, 1):
-        c = ws_sum.cell(row=2, column=ci, value=h)
-        c.font = Font(bold=True, color=WHITE, name="Arial")
-        c.fill = PatternFill("solid", fgColor=DARK_BLUE)
-        c.alignment = Alignment(horizontal='center', vertical='center')
-        c.border = thin_border()
-    ws_sum.row_dimensions[2].height = 22
-
-    temp = original_df.copy()
-    temp['_date'] = temp['تاريخ الدفع'].dt.date
-    dates_sorted = sorted(temp['_date'].dropna().unique())
-
-    for ri, d in enumerate(dates_sorted, 3):
-        day_df = temp[temp['_date'] == d]
-        bg = ALT_ROW if ri % 2 == 0 else WHITE
-        for ci in range(1, n_sc + 1):
-            c = ws_sum.cell(row=ri, column=ci)
-            c.fill = PatternFill("solid", fgColor=bg)
-            c.alignment = Alignment(horizontal='center', vertical='center')
-            c.font = Font(name="Arial", size=10)
-            c.border = thin_border()
-        ws_sum.cell(row=ri, column=1).value = str(d)
-        ws_sum.cell(row=ri, column=2).value = len(day_df)
-        ws_sum.cell(row=ri, column=3).value = float(day_df['المبلغ'].sum())
-        ws_sum.cell(row=ri, column=3).number_format = '#,##0.00'
-
-    total_row_sum = 2 + len(dates_sorted) + 1
-    for ci in range(1, n_sc + 1):
-        c = ws_sum.cell(row=total_row_sum, column=ci)
-        c.fill = PatternFill("solid", fgColor=TOTAL_BG)
-        c.border = thin_border()
-        c.alignment = Alignment(horizontal='center', vertical='center')
-        c.font = Font(bold=True, color=DARK_BLUE, name="Arial")
-
-    ws_sum.cell(row=total_row_sum, column=1).value = "✦ الإجمالي الكلي"
-    ws_sum.cell(row=total_row_sum, column=3).value = f"=SUM(C3:C{total_row_sum - 1})"
-    ws_sum.cell(row=total_row_sum, column=3).number_format = '#,##0.00'
-    ws_sum.row_dimensions[total_row_sum].height = 26
-
-    for ci, w in enumerate([18, 18, 25], 1):
-        ws_sum.column_dimensions[get_column_letter(ci)].width = w
-    ws_sum.freeze_panes = "A3"
-
-    for d in dates_sorted:
-        day_df_orig = temp[temp['_date'] == d].copy()
-        day_display = day_df_orig.rename(columns={
-            'client_code': 'كود العميل',
-            'client_name': 'اسم العميل',
-            'branch_name': 'الفرع'
-        })
-        if 'تاريخ الدفع' in day_display.columns:
-            day_display['تاريخ الدفع'] = day_display['تاريخ الدفع'].dt.strftime('%Y-%m-%d')
-        drop_cols = [c for c in day_display.columns if c.startswith('_') or c == 'id']
-        day_display = day_display.drop(columns=drop_cols, errors='ignore')
-
-        ws_day = wb.create_sheet(str(d)[:31])
-        style_sheet(ws_day, day_display, f"تقرير سدادات يوم {d}")
-
-    buf = io.BytesIO()
-    wb.save(buf)
-    return buf.getvalue()
-
-# ===================== صفحات البرامج =====================
+# ===================== الصفحات =====================
 
 def reports_page():
     """صفحة تقارير السدادات"""
@@ -355,11 +281,19 @@ def reports_page():
         st.warning("⚠️ يجب تسجيل الدخول أولاً")
         st.stop()
     
-    show_unified_header(
-        page_title="📑 سداد فوري & Opay",
-        description="عرض وتحليل بيانات السدادات - تقارير دقيقة ومتنوعة",
-        show_back_button=True
-    )
+    st.markdown('<div style="margin-top: 70px;"></div>', unsafe_allow_html=True)
+    st.markdown("""
+        <div class="main-title">
+            <h1>📑 سداد فوري & Opay</h1>
+            <p>عرض وتحليل بيانات السدادات - تقارير دقيقة ومتنوعة</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    if st.button("🏠 العودة للرئيسية", use_container_width=False):
+        st.query_params.clear()
+        st.rerun()
+    
+    st.divider()
     
     user = st.session_state['user']
     is_admin = user.get('role') == 'admin'
@@ -373,28 +307,26 @@ def reports_page():
             st.rerun()
         st.divider()
         st.markdown("### 🔍 أدوات البحث")
-        
         s_name = st.text_input("🔎 بحث باسم العميل")
         s_code = st.text_input("🔢 بحث بكود العميل")
         st.divider()
         st.markdown("### 📥 تحميل التقرير")
     
-    df_raw = fetch_all_data_paginated()
+    df_raw = fetch_reports_data()
     
     if df_raw.empty:
         st.info("📭 لا توجد بيانات متاحة حالياً")
         return
     
     df_acc = df_raw if is_admin else df_raw[df_raw['branch_name'].isin(user_branches)]
-    
     v_dates = df_acc['تاريخ الدفع'].dropna()
+    
     if v_dates.empty:
         st.info("📭 لا توجد تواريخ متاحة")
         return
     
     start_d = st.sidebar.date_input("📅 من تاريخ", v_dates.min().date())
     end_d = st.sidebar.date_input("📅 إلى تاريخ", v_dates.max().date())
-    
     codes = ["الكل"] + sorted(df_acc['كود الخدمة'].unique().tolist())
     sel_code = st.sidebar.selectbox("🏷️ كود الخدمة", codes)
     
@@ -414,38 +346,27 @@ def reports_page():
     
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.markdown(f"""<div class="metric-card">
-            <div class="metric-label">💰 إجمالي المبالغ</div>
-            <div class="metric-value">{final_df['المبلغ'].sum():,.2f} ج.م</div>
-        </div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div class="metric-card"><div class="metric-label">💰 إجمالي المبالغ</div>
+                    <div class="metric-value">{final_df['المبلغ'].sum():,.2f} ج.م</div></div>""", unsafe_allow_html=True)
     with col2:
-        st.markdown(f"""<div class="metric-card">
-            <div class="metric-label">📊 عدد العمليات</div>
-            <div class="metric-value">{len(final_df):,} حركة</div>
-        </div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div class="metric-card"><div class="metric-label">📊 عدد العمليات</div>
+                    <div class="metric-value">{len(final_df):,} حركة</div></div>""", unsafe_allow_html=True)
     with col3:
         counts = final_df['كود الخدمة'].value_counts()
         codes_html = "".join([f"<div style='font-size:13px'>• {k}: {v}</div>" for k, v in counts.items()])
-        st.markdown(f"""<div class="metric-card">
-            <div class="metric-label">📋 تفاصيل الأكواد</div>
-            <div style="font-weight:bold; color:#1e3a8a; text-align:right;">{codes_html}</div>
-        </div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div class="metric-card"><div class="metric-label">📋 تفاصيل الأكواد</div>
+                    <div style="font-weight:bold; color:#1e3a8a; text-align:right;">{codes_html}</div></div>""", unsafe_allow_html=True)
     
     st.markdown("<br>", unsafe_allow_html=True)
     
     with st.expander("📅 عرض الملخص اليومي", expanded=False):
-        daily_summary = (
-            final_df.groupby(final_df['تاريخ الدفع'].dt.date)
-            .agg(عدد_العمليات=('المبلغ', 'count'), إجمالي_المبلغ=('المبلغ', 'sum'))
-            .reset_index()
-        )
+        daily_summary = final_df.groupby(final_df['تاريخ الدفع'].dt.date).agg(
+            عدد_العمليات=('المبلغ', 'count'), إجمالي_المبلغ=('المبلغ', 'sum')).reset_index()
         daily_summary.columns = ['التاريخ', 'عدد العمليات', 'إجمالي المبلغ (ج.م)']
         st.dataframe(daily_summary, use_container_width=True, hide_index=True)
     
     display_df = final_df.copy().rename(columns={
-        'client_code': 'كود العميل',
-        'client_name': 'اسم العميل',
-        'branch_name': 'الفرع'
+        'client_code': 'كود العميل', 'client_name': 'اسم العميل', 'branch_name': 'الفرع'
     })
     drop_cols = [c for c in display_df.columns if c.startswith('_') or c == 'id']
     display_df = display_df.drop(columns=drop_cols, errors='ignore')
@@ -455,57 +376,211 @@ def reports_page():
     st.markdown("### 📋 جدول البيانات المفصل")
     st.dataframe(display_df, use_container_width=True, hide_index=True)
     
-    split_mode = st.sidebar.radio(
-        "نوع التنزيل",
-        ["📄 كل البيانات في شيت واحد", "📆 تقسيم يوم يوم (شيت لكل يوم)"],
-        index=0
-    )
-    
-    if split_mode == "📆 تقسيم يوم يوم (شيت لكل يوم)":
-        available_dates = sorted(final_df['تاريخ الدفع'].dropna().dt.date.unique())
-        date_options = ["كل الأيام"] + [str(d) for d in available_dates]
-        selected_day = st.sidebar.selectbox("اختر اليوم للتنزيل", date_options)
-        
-        if selected_day == "كل الأيام":
-            excel_bytes = generate_excel_daily(display_df, final_df)
-            file_label = f"تقرير_كل_الأيام_{datetime.now().date()}.xlsx"
-        else:
-            sel_date = pd.to_datetime(selected_day).date()
-            day_display = display_df[
-                pd.to_datetime(display_df['تاريخ الدفع'], errors='coerce').dt.date == sel_date
-            ]
-            excel_bytes = generate_excel_single(
-                day_display,
-                sheet_title=selected_day,
-                report_title=f"تقرير سدادات يوم {selected_day}"
-            )
-            file_label = f"تقرير_{selected_day}.xlsx"
-    else:
-        excel_bytes = generate_excel_single(
-            display_df,
-            report_title=f"تقرير السدادات - {start_d} إلى {end_d}"
-        )
-        file_label = f"تقرير_{datetime.now().date()}.xlsx"
+    excel_bytes = generate_reports_excel_single(display_df, report_title=f"تقرير السدادات - {start_d} إلى {end_d}")
     
     st.sidebar.download_button(
-        label="📊 تحميل Excel ملون",
+        label="📊 تحميل Excel",
         data=excel_bytes,
-        file_name=file_label,
+        file_name=f"تقرير_{datetime.now().date()}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         use_container_width=True
     )
 
-def under_construction_page(service_icon="🔒"):
+def outstanding_page():
+    """صفحة الأقساط المستحقة"""
+    if 'user' not in st.session_state:
+        st.warning("⚠️ يجب تسجيل الدخول أولاً")
+        st.stop()
+    
+    st.markdown('<div style="margin-top: 70px;"></div>', unsafe_allow_html=True)
+    st.markdown("""
+        <div class="main-title">
+            <h1>📋💰 الأقساط المستحقة</h1>
+            <p>عرض الأقساط المستحقة مع بيانات الدفع من فوري و Opay</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    if st.button("🏠 العودة للرئيسية", use_container_width=False):
+        st.query_params.clear()
+        st.rerun()
+    
+    st.divider()
+    
+    user = st.session_state['user']
+    is_admin = user.get('role') == 'admin'
+    user_branches = user.get('branches', [])
+    officer_name = user.get('full_name', '')
+    
+    with st.sidebar:
+        st.markdown(f"### 👤 مرحباً: {user['full_name']}")
+        if st.button("🚪 خروج", use_container_width=True):
+            del st.session_state['user']
+            st.query_params.clear()
+            st.rerun()
+        st.divider()
+        st.markdown("### 🔍 أدوات البحث")
+    
+    df_raw = fetch_outstanding_data()
+    
+    if df_raw.empty:
+        st.info("📭 لا توجد بيانات متاحة حالياً")
+        return
+    
+    # فلترة حسب صلاحيات المستخدم
+    if not is_admin:
+        df_acc = df_raw[df_raw['officer_name'] == officer_name]
+    else:
+        # للمدير: يمكنه اختيار الموظف
+        officers = ["الكل"] + sorted(df_raw['officer_name'].dropna().unique().tolist())
+        selected_officer = st.sidebar.selectbox("👤 اسم المسؤول", officers)
+        if selected_officer != "الكل":
+            df_acc = df_raw[df_raw['officer_name'] == selected_officer]
+        else:
+            df_acc = df_raw.copy()
+    """
+    # فلترة حسب الفرع
+    if not is_admin:
+        df_acc = df_acc[df_acc['branch_name'].isin(user_branches)]
+    else:
+        branches = ["الكل"] + sorted(df_acc['branch_name'].dropna().unique().tolist())
+        selected_branch = st.sidebar.selectbox("🏢 اسم الفرع", branches)
+        if selected_branch != "الكل":
+            df_acc = df_acc[df_acc['branch_name'] == selected_branch]
+    """
+    # فلترة البحث
+    search_name = st.sidebar.text_input("🔎 بحث باسم العميل")
+    search_nation = st.sidebar.text_input("🆔 بحث بالرقم القومي")
+    
+    if search_name:
+        df_acc = df_acc[df_acc['client_name'].astype(str).str.contains(search_name, na=False, case=False)]
+    if search_nation:
+        df_acc = df_acc[df_acc['nation_id'].astype(str).str.contains(search_nation, na=False, case=False)]
+    
+    if df_acc.empty:
+        st.warning("⚠️ لا توجد بيانات تطابق معايير البحث")
+        return
+    
+    # حساب الإحصائيات
+    total_inst_amount = df_acc['inst_amount'].astype(float).sum()
+    total_fawry_amount = df_acc['fawry_amount'].astype(float).sum()
+    total_opay_amount = df_acc['opay_amount'].astype(float).sum()
+    total_paid = total_fawry_amount + total_opay_amount
+    total_remaining = total_inst_amount - total_paid
+    
+    # عرض الإحصائيات
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.markdown(f"""<div class="metric-card"><div class="metric-label">💰 إجمالي المستحق</div>
+                    <div class="metric-value">{total_inst_amount:,.2f} ج.م</div></div>""", unsafe_allow_html=True)
+    with col2:
+        st.markdown(f"""<div class="metric-card"><div class="metric-label">💳 إجمالي المدفوع</div>
+                    <div class="metric-value">{total_paid:,.2f} ج.م</div></div>""", unsafe_allow_html=True)
+    with col3:
+        st.markdown(f"""<div class="metric-card"><div class="metric-label">📊 إجمالي المتبقي</div>
+                    <div class="metric-value">{total_remaining:,.2f} ج.م</div></div>""", unsafe_allow_html=True)
+    with col4:
+        st.markdown(f"""<div class="metric-card"><div class="metric-label">📋 عدد الأقساط</div>
+                    <div class="metric-value">{len(df_acc):,} قسط</div></div>""", unsafe_allow_html=True)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # عرض الجدول بالألوان
+    st.markdown("### 📋 جدول الأقساط المستحقة")
+    
+    # إضافة عمود حالة الدفع
+    def get_payment_status(row):
+        fawry_amt = row.get('fawry_amount', 0)
+        opay_amt = row.get('opay_amount', 0)
+        total_paid_row = (fawry_amt if pd.notna(fawry_amt) else 0) + (opay_amt if pd.notna(opay_amt) else 0)
+        inst_amt = row.get('inst_amount', 0) if pd.notna(row.get('inst_amount')) else 0
+        
+        if total_paid_row >= inst_amt and inst_amt > 0:
+            return "مدفوع بالكامل"
+        elif total_paid_row > 0:
+            return "مسدد جزئي"
+        else:
+            return "غير مدفوع"
+    
+    df_acc['حالة الدفع'] = df_acc.apply(get_payment_status, axis=1)
+    
+    # تنسيق الجدول المعروض
+    display_cols = ['officer_name', 'branch_name', 'inst_mat_date', 'client_name', 'nation_id',
+                    'loan_number', 'inst_status', 'inst_amount', 'fawry_amount', 'opay_amount', 'حالة الدفع']
+    display_names = ['اسم المسؤول', 'اسم الفرع', 'تاريخ الاستحقاق', 'اسم العميل', 'الرقم القومي',
+                     'رقم القرض', 'حالة القسط', 'قيمة القسط', 'مبلغ فوري', 'مبلغ Opay', 'حالة الدفع']
+    
+    df_display = df_acc[display_cols].copy()
+    df_display.columns = display_names
+    
+    # تنسيق التاريخ
+    df_display['تاريخ الاستحقاق'] = pd.to_datetime(df_display['تاريخ الاستحقاق'], errors='coerce').dt.strftime('%Y-%m-%d')
+    
+    # دالة لتلوين الصفوف في DataFrame المعروض
+    def color_rows(row):
+        status = row['حالة الدفع']
+        if status == 'مسدد جزئي':
+            return ['background-color: #FFCCCC; color: #9C0006'] * len(row)
+        elif status == 'غير مدفوع':
+            return ['background-color: #FFE699; color: #7F4A00'] * len(row)
+        else:
+            return ['background-color: #E2EFDA; color: #375623'] * len(row)
+    
+    # عرض الجدول ملوناً
+    styled_df = df_display.style.apply(color_rows, axis=1)
+    st.dataframe(styled_df, use_container_width=True, height=500)
+    
+    # ملخص حسب حالة الدفع
+    st.markdown("### 📊 ملخص حسب حالة الدفع")
+    summary_df = df_acc.groupby('حالة الدفع').agg({
+        'inst_amount': 'sum',
+        'fawry_amount': 'sum',
+        'opay_amount': 'sum'
+    }).reset_index()
+    summary_df.columns = ['حالة الدفع', 'إجمالي المستحق', 'إجمالي فوري', 'إجمالي Opay']
+    summary_df['إجمالي المدفوع'] = summary_df['إجمالي فوري'] + summary_df['إجمالي Opay']
+    summary_df['المتبقي'] = summary_df['إجمالي المستحق'] - summary_df['إجمالي المدفوع']
+    st.dataframe(summary_df, use_container_width=True, hide_index=True)
+    
+    # ملخص حسب المسؤول
+    if is_admin:
+        st.markdown("### 👥 ملخص حسب المسؤول")
+        officer_summary = df_acc.groupby('officer_name').agg({
+            'inst_amount': 'sum',
+            'client_name': 'count'
+        }).reset_index()
+        officer_summary.columns = ['اسم المسؤول', 'إجمالي المستحق', 'عدد الأقساط']
+        st.dataframe(officer_summary, use_container_width=True, hide_index=True)
+    
+    # تحميل Excel
+    st.sidebar.divider()
+    st.sidebar.markdown("### 📥 تحميل التقرير")
+    
+    excel_bytes = generate_outstanding_excel(df_acc)
+    st.sidebar.download_button(
+        label="📊 تحميل Excel ملون",
+        data=excel_bytes,
+        file_name=f"الاقساط_المستحقة_{datetime.now().strftime('%Y%m%d')}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True
+    )
+
+def under_construction_page(service_name, service_icon="🔒"):
     """صفحة تحت الإنشاء"""
     if 'user' not in st.session_state:
         st.warning("⚠️ يجب تسجيل الدخول أولاً")
         st.stop()
     
-    show_unified_header(
-        page_title=f"{service_icon} تحت الإنشاء",
-        description="هذه الخدمة قيد التطوير حالياً",
-        show_back_button=True
-    )
+    st.markdown('<div style="margin-top: 70px;"></div>', unsafe_allow_html=True)
+    st.markdown(f"""
+        <div class="main-title">
+            <h1>{service_icon} {service_name}</h1>
+            <p>هذه الخدمة قيد التطوير حالياً</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    if st.button("🏠 العودة للرئيسية", use_container_width=False):
+        st.query_params.clear()
+        st.rerun()
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -522,102 +597,63 @@ def under_construction_page(service_icon="🔒"):
 
 st.markdown("""
     <style>
-    /* الاتجاه العام */
     .main { direction: rtl; text-align: right; }
-    
-    /* العناوين الرئيسية */
     .main-title {
         text-align: center;
         color: #1e3a8a;
         background: linear-gradient(135deg, #eff6ff 0%, #bfdbfe 100%);
         padding: 25px;
         border-radius: 20px;
-        border: none;
         margin-bottom: 30px;
         margin-top: 0;
         box-shadow: 0 4px 15px rgba(0,0,0,0.1);
     }
-    .main-title h1 {
-        margin: 0;
-        font-size: 28px;
-    }
-    .main-title p {
-        margin: 10px 0 0;
-        color: #3b82f6;
-        font-size: 15px;
-    }
-    
-    /* بطاقات المقاييس */
+    .main-title h1 { margin: 0; font-size: 28px; }
+    .main-title p { margin: 10px 0 0; color: #3b82f6; font-size: 15px; }
     .metric-card {
         background-color: #ffffff;
         padding: 18px;
         border-radius: 12px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
         border-top: 4px solid #1e3a8a;
         text-align: center;
     }
-    .metric-value { font-size: 26px; font-weight: bold; color: #1e3a8a; }
-    .metric-label { font-size: 14px; color: #6b7280; margin-bottom: 5px; }
-    
-    /* أزرار الخدمات */
+    .metric-value { font-size: 24px; font-weight: bold; color: #1e3a8a; }
+    .metric-label { font-size: 13px; color: #6b7280; margin-bottom: 5px; }
     .service-card {
         background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
         border-radius: 12px;
-        padding: 18px 10px;
+        padding: 15px 10px;
         text-align: center;
         transition: all 0.3s ease;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         margin: 8px 0;
         color: white;
     }
-    .service-card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    }
-    .service-icon {
-        font-size: 32px;
-        margin-bottom: 10px;
-    }
-    .service-title {
-        font-size: 17px;
-        font-weight: bold;
-        margin-bottom: 8px;
-    }
-    .service-badge {
-        font-size: 12px;
-        background: rgba(255,255,255,0.2);
-        display: inline-block;
-        padding: 3px 12px;
-        border-radius: 15px;
-    }
-    .inactive-card {
-        background: linear-gradient(135deg, #6b7280 0%, #9ca3af 100%);
-        opacity: 0.8;
-    }
-    
+    .service-card:hover { transform: translateY(-3px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+    .service-icon { font-size: 28px; margin-bottom: 8px; }
+    .service-title { font-size: 16px; font-weight: bold; margin-bottom: 6px; }
+    .service-badge { font-size: 11px; background: rgba(255,255,255,0.2); display: inline-block; padding: 2px 10px; border-radius: 15px; }
+    .inactive-card { background: linear-gradient(135deg, #6b7280 0%, #9ca3af 100%); opacity: 0.8; }
     .stDataFrame { border: 1px solid #e5e7eb; border-radius: 10px; }
     input { text-align: right; direction: rtl; }
-    
-    /* إخفاء العناصر الافتراضية */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
     .stDeployButton {display:none;}
     </style>
-    """, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
 # ===================== الصفحة الرئيسية =====================
 
 def main_app():
-    """الصفحة الرئيسية - تسجيل الدخول"""
+    """الصفحة الرئيسية"""
     
     if 'user' not in st.session_state:
+        st.markdown('<div style="margin-top: 70px;"></div>', unsafe_allow_html=True)
         st.markdown("""
-            <div style="margin-top: 70px;">
-                <div class="main-title">
-                    <h1>🔐 نظام كاريتاس المتكامل</h1>
-                    <p>الرجاء تسجيل الدخول للوصول إلى الخدمات</p>
-                </div>
+            <div class="main-title">
+                <h1>🔐 نظام كاريتاس المتكامل</h1>
+                <p>الرجاء تسجيل الدخول للوصول إلى الخدمات</p>
             </div>
         """, unsafe_allow_html=True)
         
@@ -625,9 +661,8 @@ def main_app():
         with col2:
             with st.form("login_form"):
                 st.markdown("### 👤 بيانات الدخول")
-                username = st.text_input("اسم المستخدم", placeholder="أدخل اسم المستخدم")
-                password = st.text_input("كلمة المرور", type="password", placeholder="أدخل كلمة المرور")
-                
+                username = st.text_input("اسم المستخدم")
+                password = st.text_input("كلمة المرور", type="password")
                 if st.form_submit_button("🚪 دخول", use_container_width=True):
                     user = check_login(username, password)
                     if user:
@@ -637,7 +672,8 @@ def main_app():
                         st.error("❌ خطأ في اسم المستخدم أو كلمة المرور")
         return
     
-    # بعد تسجيل الدخول
+    show_logo()
+    
     user = st.session_state['user']
     
     st.markdown(f"""
@@ -657,7 +693,7 @@ def main_app():
     
     st.markdown("---")
     
-    # عرض البرامج النشطة
+    # الخدمات النشطة
     if PROGRAMS["active"]:
         st.markdown("### ✅ الخدمات المتاحة")
         for program_id, program in PROGRAMS["active"].items():
@@ -675,10 +711,9 @@ def main_app():
                     st.query_params["page"] = program_id
                     st.rerun()
     
-    # عرض البرامج تحت الإنشاء
+    # خدمات تحت الإنشاء
     if PROGRAMS["inactive"]:
         st.markdown("### 🚧 خدمات تحت الإنشاء")
-        
         inactive_items = list(PROGRAMS["inactive"].items())
         for i in range(0, len(inactive_items), 4):
             cols = st.columns(4)
@@ -691,39 +726,34 @@ def main_app():
                             <div class="service-badge">🚧 تحت الإنشاء</div>
                         </div>
                     """, unsafe_allow_html=True)
-                    
                     if st.button(f"فتح", key=f"inactive_{program_id}", use_container_width=True):
                         st.query_params["page"] = program_id
                         st.rerun()
 
 # ===================== تشغيل التطبيق =====================
 
-# ←最重要: عرض اللوجو في بداية كل صفحة (قبل أي شيء)
 show_logo()
 
-# الحصول على معامل الصفحة
 query_params = st.query_params
 page = query_params.get("page", "home")
 
-# حماية الصفحات
 if page != "home" and 'user' not in st.session_state:
     st.markdown("<div style='margin-top: 70px;'></div>", unsafe_allow_html=True)
     st.warning("⚠️ يجب تسجيل الدخول أولاً للوصول إلى هذه الصفحة")
     st.markdown("[🔐 الذهاب إلى صفحة تسجيل الدخول](/)")
     st.stop()
 
-# توجيه الصفحات
 if page == "home":
     main_app()
-elif page in PROGRAMS["active"]:
-    if page == "reports":
-        reports_page()
+elif page == "reports":
+    reports_page()
+elif page == "installments":
+    outstanding_page()
+elif page in PROGRAMS["inactive"]:
+    program = PROGRAMS["inactive"][page]
+    under_construction_page(program['name'], program['icon'])
 else:
-    if page in PROGRAMS["inactive"]:
-        program = PROGRAMS["inactive"][page]
-        under_construction_page(program['icon'])
+    if 'user' in st.session_state:
+        under_construction_page("الخدمة المطلوبة")
     else:
-        if 'user' in st.session_state:
-            under_construction_page()
-        else:
-            main_app()
+        main_app()
