@@ -385,7 +385,6 @@ def reports_page():
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         use_container_width=True
     )
-
 def outstanding_page():
     """صفحة الأقساط المستحقة"""
     if 'user' not in st.session_state:
@@ -408,11 +407,23 @@ def outstanding_page():
     
     user = st.session_state['user']
     is_admin = user.get('role') == 'admin'
-    user_branches = user.get('branches', [])
+    branches_list = user.get('branches', [])  # قائمة الفروع المسموح بها للمستخدم
+    
+    # تحويل branches إلى قائمة إذا كانت string
+    if isinstance(branches_list, str):
+        import json
+        try:
+            branches_list = json.loads(branches_list)
+        except:
+            branches_list = [branches_list]
+    
     officer_name = user.get('full_name', '')
     
     with st.sidebar:
         st.markdown(f"### 👤 مرحباً: {user['full_name']}")
+        st.markdown(f"**الدور:** {user.get('role', '')}")
+        if branches_list:
+            st.markdown(f"**الفروع المسموح بها:** {', '.join(branches_list)}")
         if st.button("🚪 خروج", use_container_width=True):
             del st.session_state['user']
             st.query_params.clear()
@@ -425,6 +436,10 @@ def outstanding_page():
     if df_raw.empty:
         st.info("📭 لا توجد بيانات متاحة حالياً")
         return
+    
+    # عرض أسماء الأعمدة للتأكد (للتشخيص)
+    with st.expander("🔧 معلومات تقنية (أسماء الأعمدة)"):
+        st.write("الأعمدة المتاحة:", list(df_raw.columns))
     
     # تحديد اسم عمود الفرع الصحيح
     branch_column = None
@@ -444,40 +459,40 @@ def outstanding_page():
     
     if branch_column is None:
         st.error("❌ لم يتم العثور على عمود الفرع في البيانات")
-        st.write("الأعمدة المتاحة:", list(df_raw.columns))
         return
     
-    # فلترة حسب المسؤول
-    if not is_admin:
-        if officer_column and officer_column in df_raw.columns:
-            df_acc = df_raw[df_raw[officer_column] == officer_name]
-        else:
-            df_acc = df_raw.copy()
-            st.info("📌 لا يوجد عمود مسؤول، يتم عرض جميع البيانات")
-    else:
-        # للمدير: يمكنه اختيار الموظف إذا وجد العمود
-        if officer_column and officer_column in df_raw.columns:
-            officers = ["الكل"] + sorted(df_raw[officer_column].dropna().unique().tolist())
-            selected_officer = st.sidebar.selectbox("👤 اسم المسؤول", officers)
-            if selected_officer != "الكل":
-                df_acc = df_raw[df_raw[officer_column] == selected_officer]
-            else:
-                df_acc = df_raw.copy()
-        else:
-            df_acc = df_raw.copy()
+    # ========== الفلترة حسب الصلاحيات ==========
     
-    # فلترة حسب الفرع
-    if not is_admin:
-        # المستخدم العادي: يشوف فروع محددة فقط
-        df_acc = df_acc[df_acc[branch_column].isin(user_branches)]
+    # 1. فلترة حسب المسؤول (للمستخدم العادي)
+    if not is_admin and officer_column:
+        # المستخدم العادي يشوف فقط البيانات اللي باسمه
+        df_acc = df_raw[df_raw[officer_column] == officer_name]
+        st.info(f"📌 يتم عرض البيانات الخاصة بـ: {officer_name}")
     else:
-        # المدير: يمكنه اختيار الفرع
+        df_acc = df_raw.copy()
+    
+    # 2. فلترة حسب الفروع المسموح بها (للمستخدم العادي)
+    if not is_admin and branches_list:
+        # تأكد من أن branch_column موجود وبياناته نصية
+        df_acc = df_acc[df_acc[branch_column].astype(str).isin(branches_list)]
+        st.info(f"📌 يتم عرض الفروع: {', '.join(branches_list)}")
+    
+    # 3. للمدير: يمكنه اختيار الموظف والفرع بحرية
+    if is_admin:
+        # فلترة حسب الموظف (اختياري)
+        if officer_column and officer_column in df_acc.columns:
+            officers = ["الكل"] + sorted(df_acc[officer_column].dropna().unique().tolist())
+            selected_officer = st.sidebar.selectbox("👤 فلترة حسب المسؤول", officers)
+            if selected_officer != "الكل":
+                df_acc = df_acc[df_acc[officer_column] == selected_officer]
+        
+        # فلترة حسب الفرع (اختياري)
         branches = ["الكل"] + sorted(df_acc[branch_column].dropna().unique().tolist())
-        selected_branch = st.sidebar.selectbox("🏢 اسم الفرع", branches)
+        selected_branch = st.sidebar.selectbox("🏢 فلترة حسب الفرع", branches)
         if selected_branch != "الكل":
             df_acc = df_acc[df_acc[branch_column] == selected_branch]
     
-    # فلترة البحث
+    # فلترة البحث الإضافية
     search_name = st.sidebar.text_input("🔎 بحث باسم العميل")
     search_nation = st.sidebar.text_input("🆔 بحث بالرقم القومي")
     
@@ -501,6 +516,13 @@ def outstanding_page():
     
     if df_acc.empty:
         st.warning("⚠️ لا توجد بيانات تطابق معايير البحث")
+        # عرض آخر 5 صفوف من البيانات الأصلية للمساعدة في التشخيص
+        with st.expander("🔍 بيانات للمساعدة في التشخيص"):
+            st.write("آخر 5 صفوف من البيانات:")
+            st.dataframe(df_raw.head(5))
+            st.write(f"قيم عمود الفرع الفريدة: {df_raw[branch_column].unique().tolist()}")
+            if branches_list:
+                st.write(f"الفروع المسموح بها للمستخدم: {branches_list}")
         return
     
     # تحديد أعمدة المبالغ
@@ -605,6 +627,11 @@ def outstanding_page():
         if 'تاريخ الاستحقاق' in df_display.columns:
             df_display['تاريخ الاستحقاق'] = pd.to_datetime(df_display['تاريخ الاستحقاق'], errors='coerce').dt.strftime('%Y-%m-%d')
         
+        # تنسيق الأرقام
+        for col in ['قيمة القسط', 'مبلغ فوري', 'مبلغ Opay']:
+            if col in df_display.columns:
+                df_display[col] = df_display[col].apply(lambda x: f"{x:,.2f}" if pd.notna(x) and x > 0 else "0.00")
+        
         # دالة لتلوين الصفوف
         def color_rows(row):
             status = row['حالة الدفع']
@@ -619,20 +646,19 @@ def outstanding_page():
         st.dataframe(styled_df, use_container_width=True, height=500)
     
     # ملخص حسب حالة الدفع
-    st.markdown("### 📊 ملخص حسب حالة الدفع")
-    summary_df = df_acc.groupby('حالة الدفع').agg({
-        inst_col: 'sum' if inst_col else 'count',
-        fawry_col: 'sum' if fawry_col else 'sum',
-        opay_col: 'sum' if opay_col else 'sum'
-    }).reset_index() if inst_col else pd.DataFrame()
-    
-    if not summary_df.empty:
+    if inst_col:
+        st.markdown("### 📊 ملخص حسب حالة الدفع")
+        summary_df = df_acc.groupby('حالة الدفع').agg({
+            inst_col: 'sum',
+            fawry_col: 'sum' if fawry_col else inst_col,
+            opay_col: 'sum' if opay_col else inst_col
+        }).reset_index()
         summary_df.columns = ['حالة الدفع', 'إجمالي المستحق', 'إجمالي فوري', 'إجمالي Opay']
         summary_df['إجمالي المدفوع'] = summary_df['إجمالي فوري'] + summary_df['إجمالي Opay']
         summary_df['المتبقي'] = summary_df['إجمالي المستحق'] - summary_df['إجمالي المدفوع']
         st.dataframe(summary_df, use_container_width=True, hide_index=True)
     
-    # ملخص حسب المسؤول (للمدير فقط)
+    # ملخص حسب المسؤول
     if is_admin and officer_column and officer_column in df_acc.columns:
         st.markdown("### 👥 ملخص حسب المسؤول")
         officer_summary = df_acc.groupby(officer_column).agg({
@@ -641,6 +667,16 @@ def outstanding_page():
         }).reset_index()
         officer_summary.columns = ['اسم المسؤول', 'إجمالي المستحق', 'عدد الأقساط']
         st.dataframe(officer_summary, use_container_width=True, hide_index=True)
+    
+    # ملخص حسب الفرع
+    if is_admin:
+        st.markdown("### 🏢 ملخص حسب الفرع")
+        branch_summary = df_acc.groupby(branch_column).agg({
+            inst_col: 'sum' if inst_col else 'count',
+            client_col: 'count' if client_col else 'count'
+        }).reset_index()
+        branch_summary.columns = ['اسم الفرع', 'إجمالي المستحق', 'عدد الأقساط']
+        st.dataframe(branch_summary, use_container_width=True, hide_index=True)
     
     # تحميل Excel
     st.sidebar.divider()
@@ -654,6 +690,7 @@ def outstanding_page():
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         use_container_width=True
     )
+    
 def under_construction_page(service_name, service_icon="🔒"):
     """صفحة تحت الإنشاء"""
     if 'user' not in st.session_state:
