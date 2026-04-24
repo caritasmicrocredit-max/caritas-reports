@@ -3,106 +3,106 @@ import pandas as pd
 from supabase import create_client
 from datetime import datetime
 import io
+import os
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-# 1. إعدادات الصفحة
+# ===================== إعدادات الصفحة الأساسية =====================
 st.set_page_config(page_title="نظام كاريتاس", layout="wide", page_icon="📊", initial_sidebar_state="auto")
 
-# 2. كود التنسيق الاحترافي (CSS)
-st.markdown("""
-    <style>
-    /* الاتجاه العام */
-    .main { direction: rtl; text-align: right; }
-    
-    /* العناوين الرئيسية */
-    .main-title {
-        text-align: center;
-        color: #1e3a8a;
-        background: linear-gradient(135deg, #eff6ff 0%, #bfdbfe 100%);
-        padding: 25px;
-        border-radius: 20px;
-        border: none;
-        margin-bottom: 30px;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-    }
-    .main-title h1 {
-        margin: 0;
-        font-size: 28px;
-    }
-    .main-title p {
-        margin: 10px 0 0;
-        color: #3b82f6;
-        font-size: 16px;
-    }
-    
-    /* بطاقات المقاييس */
-    .metric-card {
-        background-color: #ffffff;
-        padding: 20px;
-        border-radius: 15px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-        border-top: 5px solid #1e3a8a;
-        text-align: center;
-        transition: transform 0.2s;
-    }
-    .metric-card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
-    }
-    .metric-value { font-size: 28px; font-weight: bold; color: #1e3a8a; }
-    .metric-label { font-size: 14px; color: #6b7280; margin-bottom: 8px; }
-    
-    /* أزرار الخدمات */
-    .service-card {
-        background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
-        border-radius: 20px;
-        padding: 30px 15px;
-        text-align: center;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        margin: 10px 0;
-        color: white;
-    }
-    .service-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 8px 25px rgba(0,0,0,0.2);
-    }
-    .service-icon {
-        font-size: 48px;
-        margin-bottom: 15px;
-    }
-    .service-title {
-        font-size: 22px;
-        font-weight: bold;
-        margin-bottom: 10px;
-    }
-    .service-badge {
-        font-size: 13px;
-        background: rgba(255,255,255,0.2);
-        display: inline-block;
-        padding: 4px 15px;
-        border-radius: 20px;
-    }
-    .inactive-card {
-        background: linear-gradient(135deg, #6b7280 0%, #9ca3af 100%);
-        opacity: 0.8;
-    }
-    
-    .stDataFrame { border: 1px solid #e5e7eb; border-radius: 12px; }
-    input { text-align: right; direction: rtl; }
-    
-    /* إخفاء العناصر الافتراضية */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    .stDeployButton {display:none;}
-    </style>
-    """, unsafe_allow_html=True)
+# ===================== الثوابت والتكوين =====================
 
-# 3. الاتصال بـ Supabase
+# مسار اللوجو (تم رفعه على GitHub)
+LOGO_PATH = "logo.png"  # تأكد أن الملف موجود في نفس المجلد
+
+# تعريف جميع البرامج في مكان واحد (هنا فقط ستضيف برامج جديدة)
+PROGRAMS = {
+    # البرامج النشطة
+    "active": {
+        "reports": {
+            "name": "سداد فوري & Opay",
+            "icon": "💳📱",
+            "page_title": "تقرير السدادات",
+            "description": "عرض وتحليل بيانات السدادات - تقارير دقيقة ومتنوعة",
+            "function": "reports_page"  # اسم الدالة التي ستستدعى
+        },
+        # أضف برامج جديدة نشطة هنا مستقبلاً
+        # "bank_transfer": {
+        #     "name": "تحويل بنكي",
+        #     "icon": "🏦",
+        #     "page_title": "خدمة التحويل البنكي",
+        #     "description": "إدارة عمليات التحويل البنكي",
+        #     "function": "bank_transfer_page"
+        # },
+    },
+    # البرامج تحت الإنشاء
+    "inactive": {
+         "service_1": {"name": "تحت الانشاء", "icon": "🏦"},
+        "service_2": {"name": "تحت الانشاء", "icon": "💰"},
+        "service_3": {"name": "تحت الانشاء", "icon": "📞"},
+        "service_4": {"name": "تحت الانشاء", "icon": "🟠"},
+        "service_5": {"name": "تحت الانشاء", "icon": "🔴"},
+        "service_6": {"name": "تحت الانشاء", "icon": "💎"},
+        "service_7": {"name": "تحت الانشاء", "icon": "💳"},
+        "service_8": {"name": "تحت الانشاء", "icon": "🏧"},
+        "service_9": {"name": "تحت الانشاء", "icon": "📱"},
+        "service_10": {"name": "تحت الانشاء", "icon": "🟢"},
+        "service_11": {"name": "تحت الانشاء", "icon": "📦"},
+        "service_12": {"name": "تحت الانشاء", "icon": "🏪"},
+        "service_13": {"name": "تحت الانشاء", "icon": "🅱️"},
+        "service_14": {"name": "تحت الانشاء", "icon": "🟡"},
+        "service_15": {"name": "تحت الانشاء", "icon": "📊"},
+        "service_16": {"name": "تحت الانشاء", "icon": "📈"},
+        "service_17": {"name": "تحت الانشاء", "icon": "👥"},
+        "service_18": {"name": "تحت الانشاء", "icon": "⚙️"},
+    }
+}
+
+# ===================== دالة عرض اللوجو =====================
+
+def show_logo():
+    """عرض اللوجو في أعلى يسار الصفحة"""
+    if os.path.exists(LOGO_PATH):
+        st.logo(LOGO_PATH, size="large")
+    else:
+        # لو اللوجو مش موجود، نعرض نص بديل
+        st.markdown("""
+            <div style="position: fixed; top: 0; left: 0; padding: 10px; z-index: 999;">
+                <div style="background: #1e3a8a; color: white; padding: 8px 15px; border-radius: 10px; font-weight: bold;">
+                    📊 كاريتاس
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+
+# ===================== دالة عرض الهيدر الموحد =====================
+
+def show_unified_header(page_title, description, show_back_button=True):
+    """عرض هيدر موحد لجميع الصفحات"""
+    
+    # الأعمدة للهيدر
+    col1, col2, col3 = st.columns([1, 6, 1])
+    
+    with col1:
+        # مساحة فارغة للوجو (الوجو يظهر تلقائياً في أعلى اليسار)
+        pass
+    
+    with col2:
+        st.markdown(f"""
+            <div class="main-title">
+                <h1>{page_title}</h1>
+                <p>{description}</p>
+            </div>
+        """, unsafe_allow_html=True)
+    
+    with col3:
+        if show_back_button and st.session_state.get('user'):
+            if st.button("🏠 الرئيسية", use_container_width=True):
+                st.query_params.clear()
+                st.rerun()
+
+# ===================== الاتصال بـ Supabase =====================
+
 URL = st.secrets["SUPABASE_URL"]
 KEY = st.secrets["SUPABASE_KEY"]
 supabase = create_client(URL, KEY)
@@ -333,35 +333,26 @@ def generate_excel_daily(df_display, original_df):
     wb.save(buf)
     return buf.getvalue()
 
-# ===================== صفحات البرامج =====================
+# ===================== صفحات البرامج (كل برنامج في دالة منفصلة) =====================
 
 def reports_page():
-    """صفحة التقارير (سداد فوري و Opay)"""
-    # التحقق من وجود جلسة دخول
+    """صفحة تقارير السدادات (البرنامج النشط)"""
     if 'user' not in st.session_state:
-        st.warning("⚠️ يجب تسجيل الدخول أولاً من الصفحة الرئيسية")
-        st.markdown("[🔐 الذهاب إلى صفحة تسجيل الدخول](/)")
+        st.warning("⚠️ يجب تسجيل الدخول أولاً")
         st.stop()
+    
+    # عرض الهيدر الموحد
+    show_unified_header(
+        page_title="📑 سداد فوري & Opay",
+        description="عرض وتحليل بيانات السدادات - تقارير دقيقة ومتنوعة",
+        show_back_button=True
+    )
     
     user = st.session_state['user']
     is_admin = user.get('role') == 'admin'
     user_branches = user.get('branches', [])
     
-    st.markdown(f"""
-        <div class="main-title">
-            <h1>📑 سداد فوري & Opay</h1>
-            <p>عرض وتحليل بيانات السدادات - تقارير دقيقة ومتنوعة</p>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    # زر العودة للرئيسية
-    if st.button("🏠 العودة للصفحة الرئيسية", use_container_width=False):
-        st.query_params.clear()
-        st.rerun()
-    
-    st.divider()
-    
-    # شريط جانبي للبحث
+    # شريط جانبي
     with st.sidebar:
         st.markdown(f"### 👤 مرحباً: {user['full_name']}")
         if st.button("🚪 خروج", use_container_width=True):
@@ -376,6 +367,7 @@ def reports_page():
         st.divider()
         st.markdown("### 📥 تحميل التقرير")
     
+    # جلب البيانات
     df_raw = fetch_all_data_paginated()
     
     if df_raw.empty:
@@ -395,6 +387,7 @@ def reports_page():
     codes = ["الكل"] + sorted(df_acc['كود الخدمة'].unique().tolist())
     sel_code = st.sidebar.selectbox("🏷️ كود الخدمة", codes)
     
+    # تطبيق الفلتر
     mask = (df_acc['تاريخ الدفع'].dt.date >= start_d) & (df_acc['تاريخ الدفع'].dt.date <= end_d)
     if sel_code != "الكل":
         mask &= (df_acc['كود الخدمة'] == sel_code)
@@ -496,41 +489,147 @@ def reports_page():
         use_container_width=True
     )
 
-def under_construction_page(service_name):
-    """صفحة تحت الإنشاء"""
+def under_construction_page(service_name, service_icon="🔒"):
+    """صفحة تحت الإنشاء (لأي برنامج غير مكتمل)"""
     if 'user' not in st.session_state:
-        st.warning("⚠️ يجب تسجيل الدخول أولاً من الصفحة الرئيسية")
-        st.markdown("[🔐 الذهاب إلى صفحة تسجيل الدخول](/)")
+        st.warning("⚠️ يجب تسجيل الدخول أولاً")
         st.stop()
     
-    st.markdown(f"""
-        <div class="main-title">
-            <h1>🚧 {service_name}</h1>
-            <p>هذه الخدمة قيد التطوير حالياً</p>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    if st.button("🏠 العودة للصفحة الرئيسية", use_container_width=False):
-        st.query_params.clear()
-        st.rerun()
+    show_unified_header(
+        page_title=f"{service_icon} {service_name}",
+        description="هذه الخدمة قيد التطوير حالياً",
+        show_back_button=True
+    )
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.image("https://cdn-icons-png.flaticon.com/512/7439/7439576.png", width=200)
+        st.image("https://cdn-icons-png.flaticon.com/512/7439/7439576.png", width=150)
         st.markdown("""
-            <div style="text-align: center; padding: 40px; background: #fef3c7; border-radius: 20px; margin-top: 20px;">
+            <div style="text-align: center; padding: 30px; background: #fef3c7; border-radius: 15px; margin-top: 15px;">
                 <h2 style="color: #d97706;">✨ قريباً جداً ✨</h2>
-                <p style="font-size: 18px; color: #78350f;">نعمل على تطوير هذه الخدمة لتقديم أفضل تجربة لك</p>
-                <p style="margin-top: 20px; color: #92400e;">شكراً لتفهمك</p>
+                <p style="font-size: 16px; color: #78350f;">نعمل على تطوير هذه الخدمة لتقديم أفضل تجربة لك</p>
+                <p style="margin-top: 15px; color: #92400e;">شكراً لتفهمك</p>
             </div>
         """, unsafe_allow_html=True)
+
+# ===================== دالة إضافة برنامج جديد (Template) =====================
+
+def new_program_template():
+    """
+    📝 قالب لإضافة برنامج جديد
+    
+    الخطوات:
+    1. انسخ هذه الدالة وغير اسمها
+    2. أضف محتوى البرنامج الخاص بك
+    3. أضف البرنامج في قاموس PROGRAMS["active"]
+    """
+    if 'user' not in st.session_state:
+        st.warning("⚠️ يجب تسجيل الدخول أولاً")
+        st.stop()
+    
+    # عرض الهيدر الموحد
+    show_unified_header(
+        page_title="اسم البرنامج",
+        description="وصف البرنامج",
+        show_back_button=True
+    )
+    
+    # هنا ضع محتوى برنامجك
+    st.write("محتوى البرنامج...")
+
+# ===================== CSS التنسيقات =====================
+
+st.markdown("""
+    <style>
+    /* الاتجاه العام */
+    .main { direction: rtl; text-align: right; }
+    
+    /* العناوين الرئيسية */
+    .main-title {
+        text-align: center;
+        color: #1e3a8a;
+        background: linear-gradient(135deg, #eff6ff 0%, #bfdbfe 100%);
+        padding: 20px;
+        border-radius: 20px;
+        border: none;
+        margin-bottom: 30px;
+        margin-top: 0;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    .main-title h1 {
+        margin: 0;
+        font-size: 24px;
+    }
+    .main-title p {
+        margin: 8px 0 0;
+        color: #3b82f6;
+        font-size: 14px;
+    }
+    
+    /* بطاقات المقاييس */
+    .metric-card {
+        background-color: #ffffff;
+        padding: 15px;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        border-top: 4px solid #1e3a8a;
+        text-align: center;
+    }
+    .metric-value { font-size: 24px; font-weight: bold; color: #1e3a8a; }
+    .metric-label { font-size: 13px; color: #6b7280; margin-bottom: 5px; }
+    
+    /* أزرار الخدمات */
+    .service-card {
+        background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+        border-radius: 12px;
+        padding: 15px 10px;
+        text-align: center;
+        transition: all 0.3s ease;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        margin: 8px 0;
+        color: white;
+    }
+    .service-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    .service-icon {
+        font-size: 28px;
+        margin-bottom: 8px;
+    }
+    .service-title {
+        font-size: 16px;
+        font-weight: bold;
+        margin-bottom: 6px;
+    }
+    .service-badge {
+        font-size: 11px;
+        background: rgba(255,255,255,0.2);
+        display: inline-block;
+        padding: 2px 10px;
+        border-radius: 15px;
+    }
+    .inactive-card {
+        background: linear-gradient(135deg, #6b7280 0%, #9ca3af 100%);
+        opacity: 0.8;
+    }
+    
+    .stDataFrame { border: 1px solid #e5e7eb; border-radius: 10px; }
+    input { text-align: right; direction: rtl; }
+    
+    /* إخفاء العناصر الافتراضية */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    .stDeployButton {display:none;}
+    </style>
+    """, unsafe_allow_html=True)
 
 # ===================== الصفحة الرئيسية =====================
 
 def main_app():
     """الصفحة الرئيسية - تسجيل الدخول ثم عرض الخدمات"""
     
-    # إذا لم يكن مسجل دخول - عرض واجهة تسجيل الدخول
     if 'user' not in st.session_state:
         st.markdown("""
             <div class="main-title">
@@ -543,8 +642,8 @@ def main_app():
         with col2:
             with st.form("login_form"):
                 st.markdown("### 👤 بيانات الدخول")
-                username = st.text_input("اسم المستخدم", placeholder="أدخل اسم المستخدم", key="login_user")
-                password = st.text_input("كلمة المرور", type="password", placeholder="أدخل كلمة المرور", key="login_pass")
+                username = st.text_input("اسم المستخدم", placeholder="أدخل اسم المستخدم")
+                password = st.text_input("كلمة المرور", type="password", placeholder="أدخل كلمة المرور")
                 
                 if st.form_submit_button("🚪 دخول", use_container_width=True):
                     user = check_login(username, password)
@@ -555,7 +654,9 @@ def main_app():
                         st.error("❌ خطأ في اسم المستخدم أو كلمة المرور")
         return
     
-    # إذا كان مسجل دخول - عرض الخدمات
+    # عرض اللوجو
+    show_logo()
+    
     user = st.session_state['user']
     
     st.markdown(f"""
@@ -565,80 +666,85 @@ def main_app():
         </div>
     """, unsafe_allow_html=True)
     
-    # زر الخروج
-    if st.button("🚪 تسجيل الخروج", use_container_width=False):
-        del st.session_state['user']
-        st.rerun()
+    col1, col2 = st.columns([1, 4])
+    with col1:
+        if st.button("🚪 خروج", use_container_width=True):
+            del st.session_state['user']
+            st.rerun()
     
     st.markdown("---")
     
-    # زر سداد فوري و Opay معًا (نشط)
-    st.markdown("""
-        <div class="service-card">
-            <div class="service-icon">💳📱</div>
-            <div class="service-title">سداد فوري & Opay</div>
-            <div class="service-badge">✅ متاح الآن</div>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    if st.button("فتح الخدمة", key="btn_main_service", use_container_width=True):
-        st.query_params["page"] = "reports"
-        st.rerun()
-    
-    st.markdown("---")
-    st.markdown("### 🚧 خدمات تحت الإنشاء")
-    
-    # 18 زر تحت الإنشاء فقط
-    buttons_under_construction = [
-        "خدمة 1", "خدمة 2", "خدمة 3", "خدمة 4",
-        "خدمة 5", "خدمة 6", "خدمة 7", "خدمة 8",
-        "خدمة 9", "خدمة 10", "خدمة 11", "خدمة 12",
-        "خدمة 13", "خدمة 14", "خدمة 15", "خدمة 16",
-        "خدمة 17", "خدمة 18"
-    ]
-    
-    # عرض الأزرار في شبكة 4x5
-    for i in range(0, len(buttons_under_construction), 4):
-        cols = st.columns(4)
-        for j, service_name in enumerate(buttons_under_construction[i:i+4]):
-            with cols[j]:
+    # عرض البرامج النشطة
+    if PROGRAMS["active"]:
+        st.markdown("### ✅ الخدمات المتاحة")
+        for program_id, program in PROGRAMS["active"].items():
+            cols = st.columns([1, 3])
+            with cols[0]:
                 st.markdown(f"""
-                    <div class="service-card inactive-card">
-                        <div class="service-icon">🔒</div>
-                        <div class="service-title">{service_name}</div>
-                        <div class="service-badge">🚧 تحت الإنشاء</div>
+                    <div class="service-card">
+                        <div class="service-icon">{program['icon']}</div>
+                        <div class="service-title">{program['name']}</div>
+                        <div class="service-badge">✅ متاح</div>
                     </div>
                 """, unsafe_allow_html=True)
-                
-                # كل زر يفتح صفحة تحت الإنشاء خاصة به
-                if st.button(f"فتح {service_name}", key=f"service_{i+j}", use_container_width=True):
-                    st.query_params["page"] = f"under_construction_{i+j}"
+            with cols[1]:
+                if st.button(f"فتح {program['name']}", key=f"active_{program_id}", use_container_width=True):
+                    st.query_params["page"] = program_id
                     st.rerun()
+    
+    # عرض البرامج تحت الإنشاء
+    if PROGRAMS["inactive"]:
+        st.markdown("### 🚧 خدمات تحت الإنشاء")
+        
+        inactive_items = list(PROGRAMS["inactive"].items())
+        for i in range(0, len(inactive_items), 4):
+            cols = st.columns(4)
+            for j, (program_id, program) in enumerate(inactive_items[i:i+4]):
+                with cols[j]:
+                    st.markdown(f"""
+                        <div class="service-card inactive-card">
+                            <div class="service-icon">{program['icon']}</div>
+                            <div class="service-title">{program['name']}</div>
+                            <div class="service-badge">🚧 تحت الإنشاء</div>
+                        </div>
+                    """, unsafe_allow_html=True)
+                    
+                    if st.button(f"فتح {program['name']}", key=f"inactive_{program_id}", use_container_width=True):
+                        st.query_params["page"] = program_id
+                        st.rerun()
 
 # ===================== توجيه الصفحات =====================
 
-# الحصول على معامل الصفحة من URL
+# عرض اللوجو في جميع الصفحات (لأنه يظهر في أعلى اليسار دائماً)
+show_logo()
+
+# الحصول على معامل الصفحة
 query_params = st.query_params
 page = query_params.get("page", "home")
 
-# حماية الصفحات - إذا لم يكن مسجل دخول وأي صفحة غير الرئيسية
+# حماية الصفحات
 if page != "home" and 'user' not in st.session_state:
     st.warning("⚠️ يجب تسجيل الدخول أولاً للوصول إلى هذه الصفحة")
     st.markdown("[🔐 الذهاب إلى صفحة تسجيل الدخول](/)")
     st.stop()
 
-# توجيه الصفحات
+# توجيه الصفحات حسب الطلب
 if page == "home":
     main_app()
-elif page == "reports":
-    reports_page()
-elif page and page.startswith("under_construction"):
-    # استخراج رقم الخدمة من اسم الصفحة
-    service_num = page.split("_")[-1] if "_" in page else "1"
-    under_construction_page(f"الخدمة رقم {service_num}")
+elif page in PROGRAMS["active"]:
+    # البرامج النشطة
+    if page == "reports":
+        reports_page()
+    # أضف برامج نشطة جديدة هنا
+    # elif page == "bank_transfer":
+    #     bank_transfer_page()
 else:
-    # أي صفحة غير معروفة
-    if 'user' in st.session_state:
-        under_construction_page("الخدمة المطلوبة")
+    # البرامج تحت الإنشاء أو غير المعروفة
+    if page in PROGRAMS["inactive"]:
+        program = PROGRAMS["inactive"][page]
+        under_construction_page(program['name'], program['icon'])
     else:
-        main_app()
+        if 'user' in st.session_state:
+            under_construction_page("الخدمة المطلوبة")
+        else:
+            main_app()
