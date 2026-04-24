@@ -167,12 +167,10 @@ def generate_outstanding_excel(df, title="تقرير الأقساط المستح
     ws.title = "الأقساط المستحقة"
     ws.sheet_view.rightToLeft = True
 
-    # تحضير الأعمدة
     cols = list(df.columns)
     n_cols = len(cols)
     last_col = get_column_letter(n_cols)
 
-    # عنوان رئيسي
     ws.merge_cells(f'A1:{last_col}1')
     ws['A1'].value = title
     ws['A1'].font = Font(bold=True, size=16, color="1E3A8A", name="Arial")
@@ -180,7 +178,6 @@ def generate_outstanding_excel(df, title="تقرير الأقساط المستح
     ws['A1'].alignment = Alignment(horizontal='center', vertical='center')
     ws.row_dimensions[1].height = 35
 
-    # الرؤوس
     headers = ['اسم المسؤول', 'كود الفرع', 'اسم الفرع', 'تاريخ استحقاق القسط', 'تاريخ حالة القسط',
                'كود العميل', 'اسم العميل', 'الرقم القومي', 'رقم القرض', 'حالة القسط', 'قيمة القسط',
                'نوع الفاتورة', 'تاريخ التحويل', 'وقت التحويل', 'مبلغ فوري', 'رقم حساب الفوترة',
@@ -194,7 +191,6 @@ def generate_outstanding_excel(df, title="تقرير الأقساط المستح
         c.border = thin_border()
     ws.row_dimensions[2].height = 30
 
-    # البيانات مع التلوين
     for ri, row in enumerate(df.itertuples(index=False), 3):
         for ci, val in enumerate(row, 1):
             c = ws.cell(row=ri, column=ci, value=val)
@@ -202,7 +198,6 @@ def generate_outstanding_excel(df, title="تقرير الأقساط المستح
             c.font = Font(name="Arial", size=10)
             c.border = thin_border()
             
-            # تلوين حسب حالة القسط
             status = str(row[9]) if len(row) > 9 else ""
             if "مسدد جزئي" in status:
                 c.fill = PatternFill("solid", fgColor="FFCCCC")
@@ -214,7 +209,6 @@ def generate_outstanding_excel(df, title="تقرير الأقساط المستح
                 c.fill = PatternFill("solid", fgColor="E2EFDA")
                 c.font = Font(color="375623")
     
-    # ضبط عرض الأعمدة
     col_widths = {'اسم العميل': 25, 'اسم الفرع': 20, 'اسم المسؤول': 18, 'الرقم القومي': 15}
     for ci, col in enumerate(headers[:len(cols)], 1):
         width = col_widths.get(col, 15)
@@ -385,6 +379,7 @@ def reports_page():
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         use_container_width=True
     )
+
 def outstanding_page():
     """صفحة الأقساط المستحقة"""
     if 'user' not in st.session_state:
@@ -436,6 +431,10 @@ def outstanding_page():
         st.info("📭 لا توجد بيانات متاحة حالياً")
         return
     
+    # عرض أسماء الأعمدة للتشخيص (في expander)
+    with st.expander("🔧 معلومات تقنية (أسماء الأعمدة)"):
+        st.write("الأعمدة المتاحة:", list(df_raw.columns))
+    
     # تحديد اسم عمود الفرع الصحيح
     branch_column = None
     possible_branch_names = ['branch_name', 'Branch_name', 'اسم الفرع', 'branch', 'Branch']
@@ -446,7 +445,7 @@ def outstanding_page():
     
     # تحديد اسم عمود المسؤول الصحيح
     officer_column = None
-    possible_officer_names = ['officer_name', 'Officer_name', 'اسم المسؤول', 'officer', 'Officer']
+    possible_officer_names = ['officer_name', 'Officer_name', 'اسم المسؤول', 'officer', 'Officer', 'emp_name', 'employee_name']
     for col in possible_officer_names:
         if col in df_raw.columns:
             officer_column = col
@@ -487,13 +486,20 @@ def outstanding_page():
     # ========== الفلاتر الإضافية في الشريط الجانبي ==========
     st.sidebar.markdown("### 🎯 فلاتر إضافية")
     
-    # فلتر اسم الاخصائي (للكل، ولكن الخيارات تأتي من النتائج الحالية)
-    if officer_column and officer_column in df_acc.columns:
-        officers_list = sorted(df_acc[officer_column].dropna().unique().tolist())
+    # فلتر اسم الاخصائي - البحث الديناميكي عن العمود
+    officer_filter_col = None
+    for col in df_acc.columns:
+        col_lower = col.lower()
+        if 'officer' in col_lower or 'مسؤول' in col_lower or 'مسئول' in col_lower:
+            officer_filter_col = col
+            break
+    
+    if officer_filter_col:
+        officers_list = sorted(df_acc[officer_filter_col].dropna().unique().tolist())
         if officers_list:
             selected_officer = st.sidebar.selectbox("👤 فلترة حسب الاخصائي", ["الكل"] + officers_list)
             if selected_officer != "الكل":
-                df_acc = df_acc[df_acc[officer_column] == selected_officer]
+                df_acc = df_acc[df_acc[officer_filter_col] == selected_officer]
     
     # فلتر اسم العميل
     search_name = st.sidebar.text_input("🔎 بحث باسم العميل")
@@ -674,35 +680,65 @@ def outstanding_page():
         st.dataframe(summary_df, use_container_width=True, hide_index=True)
     
     # ملخص حسب المسؤول (يظهر للجميع)
-    if officer_column and officer_column in df_acc.columns and len(df_acc[officer_column].unique()) > 0:
+    # البحث مرة أخرى عن عمود المسؤول بعد الفلترة
+    officer_col_found = None
+    for col in df_acc.columns:
+        col_lower = col.lower()
+        if 'officer' in col_lower or 'مسؤول' in col_lower or 'مسئول' in col_lower:
+            officer_col_found = col
+            break
+    
+    if officer_col_found and len(df_acc[officer_col_found].dropna().unique()) > 0:
         st.markdown("### 👥 ملخص حسب المسؤول")
         
-        # تجميع البيانات بشكل آمن
         try:
-            # حساب إجمالي المستحق لكل مسؤول
-            officer_totals = df_acc.groupby(officer_column)[inst_col].sum().reset_index()
-            officer_totals.columns = ['اسم المسؤول', 'إجمالي المستحق']
+            # تجميع البيانات
+            officer_summary = df_acc.groupby(officer_col_found).agg({
+                inst_col: ['sum', 'count']
+            }).reset_index()
             
-            # حساب عدد الأقساط لكل مسؤول
-            officer_counts = df_acc.groupby(officer_column).size().reset_index(name='عدد الأقساط')
-            
-            # دمج البيانات
-            officer_summary = pd.merge(officer_totals, officer_counts, on=officer_column)
             officer_summary.columns = ['اسم المسؤول', 'إجمالي المستحق', 'عدد الأقساط']
             
-            # حساب متوسط القسط
-            officer_summary['متوسط القسط'] = officer_summary['إجمالي المستحق'] / officer_summary['عدد الأقساط']
-            officer_summary['متوسط القسط'] = officer_summary['متوسط القسط'].apply(lambda x: f"{x:,.2f}")
+            # إضافة المدفوعات إن وجدت
+            if fawry_col and fawry_col in df_acc.columns:
+                fawry_sum = df_acc.groupby(officer_col_found)[fawry_col].sum().reset_index()
+                fawry_sum.columns = ['اسم المسؤول', 'إجمالي فوري']
+                officer_summary = officer_summary.merge(fawry_sum, on='اسم المسؤول', how='left')
+                officer_summary['إجمالي فوري'] = officer_summary['إجمالي فوري'].fillna(0)
+            else:
+                officer_summary['إجمالي فوري'] = 0
             
-            # تنسيق إجمالي المستحق
-            officer_summary['إجمالي المستحق'] = officer_summary['إجمالي المستحق'].apply(lambda x: f"{x:,.2f}")
+            if opay_col and opay_col in df_acc.columns:
+                opay_sum = df_acc.groupby(officer_col_found)[opay_col].sum().reset_index()
+                opay_sum.columns = ['اسم المسؤول', 'إجمالي Opay']
+                officer_summary = officer_summary.merge(opay_sum, on='اسم المسؤول', how='left')
+                officer_summary['إجمالي Opay'] = officer_summary['إجمالي Opay'].fillna(0)
+            else:
+                officer_summary['إجمالي Opay'] = 0
+            
+            # حساب الإجماليات
+            officer_summary['إجمالي المدفوع'] = officer_summary['إجمالي فوري'] + officer_summary['إجمالي Opay']
+            officer_summary['المتبقي'] = officer_summary['إجمالي المستحق'] - officer_summary['إجمالي المدفوع']
+            officer_summary['متوسط القسط'] = officer_summary['إجمالي المستحق'] / officer_summary['عدد الأقساط']
+            
+            # تنسيق الأرقام
+            for col in ['إجمالي المستحق', 'إجمالي فوري', 'إجمالي Opay', 'إجمالي المدفوع', 'المتبقي', 'متوسط القسط']:
+                if col in officer_summary.columns:
+                    officer_summary[col] = officer_summary[col].apply(lambda x: f"{x:,.2f}")
+            
+            # ترتيب حسب إجمالي المستحق
+            officer_summary = officer_summary.sort_values('إجمالي المستحق', ascending=False)
             
             st.dataframe(officer_summary, use_container_width=True, hide_index=True)
             
         except Exception as e:
             st.warning(f"تعذر عرض ملخص المسؤولين: {str(e)}")
-            # عرض بيانات خام بديلة
-            st.dataframe(df_acc[[officer_column, inst_col]].head(10))
+            # عرض بيانات بسيطة كبديل
+            simple_summary = df_acc[officer_col_found].value_counts().reset_index()
+            simple_summary.columns = ['اسم المسؤول', 'عدد الأقساط']
+            st.dataframe(simple_summary, use_container_width=True, hide_index=True)
+    else:
+        st.info("📌 لا توجد بيانات للمسؤولين في النتائج الحالية")
     
     # تحميل Excel
     st.sidebar.divider()
