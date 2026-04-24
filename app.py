@@ -431,10 +431,6 @@ def outstanding_page():
         st.info("📭 لا توجد بيانات متاحة حالياً")
         return
     
-    # عرض أسماء الأعمدة للتشخيص (في expander)
-    with st.expander("🔧 معلومات تقنية (أسماء الأعمدة)"):
-        st.write("الأعمدة المتاحة:", list(df_raw.columns))
-    
     # تحديد اسم عمود الفرع الصحيح
     branch_column = None
     possible_branch_names = ['branch_name', 'Branch_name', 'اسم الفرع', 'branch', 'Branch']
@@ -539,13 +535,6 @@ def outstanding_page():
     
     if df_acc.empty:
         st.warning("⚠️ لا توجد بيانات تطابق معايير البحث")
-        with st.expander("🔍 بيانات للمساعدة في التشخيص"):
-            st.write("عدد الصفوف في البيانات الأصلية:", len(df_raw))
-            st.write("قيم عمود الفرع الفريدة:", df_raw[branch_column].unique().tolist())
-            if branches_list:
-                st.write(f"الفروع المسموح بها للمستخدم: {branches_list}")
-            if officer_column:
-                st.write(f"قيم عمود الاخصائي الفريدة (عينة):", df_raw[officer_column].dropna().unique().tolist()[:10])
         return
     
     # تحويل المبالغ إلى numeric
@@ -556,7 +545,33 @@ def outstanding_page():
     if opay_col:
         df_acc[opay_col] = pd.to_numeric(df_acc[opay_col], errors='coerce').fillna(0)
     
-    # حساب الإحصائيات
+    # إضافة عمود حالة الدفع قبل الترتيب
+    def get_payment_status(row):
+        fawry_amt = row.get(fawry_col, 0) if fawry_col else 0
+        opay_amt = row.get(opay_col, 0) if opay_col else 0
+        total_paid_row = (fawry_amt if pd.notna(fawry_amt) else 0) + (opay_amt if pd.notna(opay_amt) else 0)
+        inst_amt = row.get(inst_col, 0) if inst_col and pd.notna(row.get(inst_col)) else 0
+        
+        if total_paid_row >= inst_amt and inst_amt > 0:
+            return "✅ مدفوع بالكامل"
+        elif total_paid_row > 0:
+            return "⚠️ مسدد جزئي"
+        else:
+            return "❌ غير مدفوع"
+    
+    df_acc['حالة الدفع'] = df_acc.apply(get_payment_status, axis=1)
+    
+    # ========== ترتيب البيانات: مدفوع أولاً، ثم مسدد جزئي، ثم غير مدفوع ==========
+    # ترتيب الأولوية: مدفوع بالكامل (0) -> مسدد جزئي (1) -> غير مدفوع (2)
+    status_order = {
+        "✅ مدفوع بالكامل": 0,
+        "⚠️ مسدد جزئي": 1,
+        "❌ غير مدفوع": 2
+    }
+    df_acc['_sort_key'] = df_acc['حالة الدفع'].map(status_order)
+    df_acc = df_acc.sort_values('_sort_key').drop('_sort_key', axis=1)
+    
+    # حساب الإحصائيات بعد الترتيب
     total_inst_amount = df_acc[inst_col].sum() if inst_col else 0
     total_fawry_amount = df_acc[fawry_col].sum() if fawry_col else 0
     total_opay_amount = df_acc[opay_col].sum() if opay_col else 0
@@ -582,22 +597,6 @@ def outstanding_page():
     
     # عرض الجدول بالألوان
     st.markdown("### 📋 جدول الأقساط المستحقة")
-    
-    # إضافة عمود حالة الدفع
-    def get_payment_status(row):
-        fawry_amt = row.get(fawry_col, 0) if fawry_col else 0
-        opay_amt = row.get(opay_col, 0) if opay_col else 0
-        total_paid_row = (fawry_amt if pd.notna(fawry_amt) else 0) + (opay_amt if pd.notna(opay_amt) else 0)
-        inst_amt = row.get(inst_col, 0) if inst_col and pd.notna(row.get(inst_col)) else 0
-        
-        if total_paid_row >= inst_amt and inst_amt > 0:
-            return "✅ مدفوع بالكامل"
-        elif total_paid_row > 0:
-            return "⚠️ مسدد جزئي"
-        else:
-            return "❌ غير مدفوع"
-    
-    df_acc['حالة الدفع'] = df_acc.apply(get_payment_status, axis=1)
     
     # تحديد أعمدة العرض
     display_cols = []
@@ -677,10 +676,13 @@ def outstanding_page():
             if col in summary_df.columns:
                 summary_df[col] = summary_df[col].apply(lambda x: f"{x:,.2f}")
         
+        # ترتيب حسب حالة الدفع
+        summary_df['_order'] = summary_df['حالة الدفع'].map(status_order)
+        summary_df = summary_df.sort_values('_order').drop('_order', axis=1)
+        
         st.dataframe(summary_df, use_container_width=True, hide_index=True)
     
-    # ملخص حسب المسؤول (يظهر للجميع)
-    # البحث مرة أخرى عن عمود المسؤول بعد الفلترة
+    # ملخص حسب المسؤول
     officer_col_found = None
     for col in df_acc.columns:
         col_lower = col.lower()
@@ -733,12 +735,9 @@ def outstanding_page():
             
         except Exception as e:
             st.warning(f"تعذر عرض ملخص المسؤولين: {str(e)}")
-            # عرض بيانات بسيطة كبديل
             simple_summary = df_acc[officer_col_found].value_counts().reset_index()
             simple_summary.columns = ['اسم المسؤول', 'عدد الأقساط']
             st.dataframe(simple_summary, use_container_width=True, hide_index=True)
-    else:
-        st.info("📌 لا توجد بيانات للمسؤولين في النتائج الحالية")
     
     # تحميل Excel
     st.sidebar.divider()
