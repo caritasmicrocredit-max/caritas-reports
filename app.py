@@ -407,7 +407,8 @@ def outstanding_page():
     
     user = st.session_state['user']
     is_admin = user.get('role') == 'admin'
-    branches_list = user.get('branches', [])  # قائمة الفروع المسموح بها للمستخدم
+    user_role = user.get('role', '')
+    branches_list = user.get('branches', [])
     
     # تحويل branches إلى قائمة إذا كانت string
     if isinstance(branches_list, str):
@@ -421,7 +422,7 @@ def outstanding_page():
     
     with st.sidebar:
         st.markdown(f"### 👤 مرحباً: {user['full_name']}")
-        st.markdown(f"**الدور:** {user.get('role', '')}")
+        st.markdown(f"**الدور:** {user_role}")
         if branches_list:
             st.markdown(f"**الفروع المسموح بها:** {', '.join(branches_list)}")
         if st.button("🚪 خروج", use_container_width=True):
@@ -436,10 +437,6 @@ def outstanding_page():
     if df_raw.empty:
         st.info("📭 لا توجد بيانات متاحة حالياً")
         return
-    
-    # عرض أسماء الأعمدة للتأكد (للتشخيص)
-    with st.expander("🔧 معلومات تقنية (أسماء الأعمدة)"):
-        st.write("الأعمدة المتاحة:", list(df_raw.columns))
     
     # تحديد اسم عمود الفرع الصحيح
     branch_column = None
@@ -457,43 +454,54 @@ def outstanding_page():
             officer_column = col
             break
     
+    # تحديد أعمدة المبالغ
+    inst_col = None
+    for col in ['inst_amount', 'قيمة القسط', 'amount', 'inst_amt']:
+        if col in df_raw.columns:
+            inst_col = col
+            break
+    
+    fawry_col = None
+    for col in ['fawry_amount', 'amount', 'fawry_amt', 'Amount']:
+        if col in df_raw.columns:
+            fawry_col = col
+            break
+    
+    opay_col = None
+    for col in ['opay_amount', 'opay_amt', 'opayAmount']:
+        if col in df_raw.columns:
+            opay_col = col
+            break
+    
     if branch_column is None:
         st.error("❌ لم يتم العثور على عمود الفرع في البيانات")
         return
     
     # ========== الفلترة حسب الصلاحيات ==========
     
-    # 1. فلترة حسب المسؤول (للمستخدم العادي)
-    if not is_admin and officer_column:
-        # المستخدم العادي يشوف فقط البيانات اللي باسمه
-        df_acc = df_raw[df_raw[officer_column] == officer_name]
-        st.info(f"📌 يتم عرض البيانات الخاصة بـ: {officer_name}")
+    # الفلترة الأساسية: حسب الفروع المسموح بها للمستخدم العادي
+    if not is_admin and branches_list:
+        df_acc = df_raw[df_raw[branch_column].astype(str).isin(branches_list)].copy()
+        st.info(f"📌 يتم عرض الفروع: {', '.join(branches_list)}")
     else:
         df_acc = df_raw.copy()
     
-    # 2. فلترة حسب الفروع المسموح بها (للمستخدم العادي)
-    if not is_admin and branches_list:
-        # تأكد من أن branch_column موجود وبياناته نصية
-        df_acc = df_acc[df_acc[branch_column].astype(str).isin(branches_list)]
-        st.info(f"📌 يتم عرض الفروع: {', '.join(branches_list)}")
+    # ========== الفلاتر الإضافية في الشريط الجانبي ==========
+    st.sidebar.markdown("### 🎯 فلاتر إضافية")
     
-    # 3. للمدير: يمكنه اختيار الموظف والفرع بحرية
-    if is_admin:
-        # فلترة حسب الموظف (اختياري)
-        if officer_column and officer_column in df_acc.columns:
-            officers = ["الكل"] + sorted(df_acc[officer_column].dropna().unique().tolist())
-            selected_officer = st.sidebar.selectbox("👤 فلترة حسب المسؤول", officers)
+    # فلتر اسم الاخصائي (للكل، ولكن الخيارات تأتي من النتائج الحالية)
+    if officer_column and officer_column in df_acc.columns:
+        # جلب قائمة الاخصائيين من النتائج الحالية (بعد فلترة الفروع)
+        officers_list = sorted(df_acc[officer_column].dropna().unique().tolist())
+        if officers_list:
+            selected_officer = st.sidebar.selectbox("👤 فلترة حسب الاخصائي", ["الكل"] + officers_list)
             if selected_officer != "الكل":
                 df_acc = df_acc[df_acc[officer_column] == selected_officer]
-        
-        # فلترة حسب الفرع (اختياري)
-        branches = ["الكل"] + sorted(df_acc[branch_column].dropna().unique().tolist())
-        selected_branch = st.sidebar.selectbox("🏢 فلترة حسب الفرع", branches)
-        if selected_branch != "الكل":
-            df_acc = df_acc[df_acc[branch_column] == selected_branch]
     
-    # فلترة البحث الإضافية
+    # فلتر اسم العميل
     search_name = st.sidebar.text_input("🔎 بحث باسم العميل")
+    
+    # فلتر الرقم القومي
     search_nation = st.sidebar.text_input("🆔 بحث بالرقم القومي")
     
     # البحث في أعمدة العميل
@@ -514,35 +522,28 @@ def outstanding_page():
     if search_nation and nation_col:
         df_acc = df_acc[df_acc[nation_col].astype(str).str.contains(search_nation, na=False, case=False)]
     
+    # ========== فلترة إضافية للمدير فقط ==========
+    if is_admin:
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("### 🔧 فلترة المدير")
+        
+        # فلتر الفرع (للمدير)
+        branches_in_data = sorted(df_acc[branch_column].dropna().unique().tolist())
+        if branches_in_data:
+            selected_branch = st.sidebar.selectbox("🏢 فلترة حسب الفرع", ["الكل"] + branches_in_data)
+            if selected_branch != "الكل":
+                df_acc = df_acc[df_acc[branch_column] == selected_branch]
+    
     if df_acc.empty:
         st.warning("⚠️ لا توجد بيانات تطابق معايير البحث")
-        # عرض آخر 5 صفوف من البيانات الأصلية للمساعدة في التشخيص
         with st.expander("🔍 بيانات للمساعدة في التشخيص"):
-            st.write("آخر 5 صفوف من البيانات:")
-            st.dataframe(df_raw.head(5))
-            st.write(f"قيم عمود الفرع الفريدة: {df_raw[branch_column].unique().tolist()}")
+            st.write("عدد الصفوف في البيانات الأصلية:", len(df_raw))
+            st.write("قيم عمود الفرع الفريدة:", df_raw[branch_column].unique().tolist())
             if branches_list:
                 st.write(f"الفروع المسموح بها للمستخدم: {branches_list}")
+            if officer_column:
+                st.write(f"قيم عمود الاخصائي الفريدة:", df_raw[officer_column].dropna().unique().tolist()[:10])
         return
-    
-    # تحديد أعمدة المبالغ
-    inst_col = None
-    for col in ['inst_amount', 'قيمة القسط', 'amount', 'inst_amt']:
-        if col in df_acc.columns:
-            inst_col = col
-            break
-    
-    fawry_col = None
-    for col in ['fawry_amount', 'amount', 'fawry_amt', 'Amount']:
-        if col in df_acc.columns:
-            fawry_col = col
-            break
-    
-    opay_col = None
-    for col in ['opay_amount', 'opay_amt', 'opayAmount']:
-        if col in df_acc.columns:
-            opay_col = col
-            break
     
     # تحويل المبالغ إلى numeric
     if inst_col:
@@ -587,11 +588,11 @@ def outstanding_page():
         inst_amt = row.get(inst_col, 0) if inst_col and pd.notna(row.get(inst_col)) else 0
         
         if total_paid_row >= inst_amt and inst_amt > 0:
-            return "مدفوع بالكامل"
+            return "✅ مدفوع بالكامل"
         elif total_paid_row > 0:
-            return "مسدد جزئي"
+            return "⚠️ مسدد جزئي"
         else:
-            return "غير مدفوع"
+            return "❌ غير مدفوع"
     
     df_acc['حالة الدفع'] = df_acc.apply(get_payment_status, axis=1)
     
@@ -601,17 +602,17 @@ def outstanding_page():
     
     # الأعمدة الأساسية
     col_mapping = [
-        (officer_column, 'اسم المسؤول'),
-        (branch_column, 'اسم الفرع'),
-        ('inst_mat_date', 'تاريخ الاستحقاق'),
-        (client_col, 'اسم العميل'),
-        (nation_col, 'الرقم القومي'),
-        ('loan_number', 'رقم القرض'),
-        ('inst_status', 'حالة القسط'),
-        (inst_col, 'قيمة القسط'),
-        (fawry_col, 'مبلغ فوري'),
-        (opay_col, 'مبلغ Opay'),
-        ('حالة الدفع', 'حالة الدفع')
+        ('حالة الدفع', '📊 حالة الدفع'),
+        (branch_column, '🏢 اسم الفرع'),
+        (client_col, '👤 اسم العميل'),
+        (nation_col, '🆔 الرقم القومي'),
+        ('inst_mat_date', '📅 تاريخ الاستحقاق'),
+        (inst_col, '💰 قيمة القسط'),
+        (fawry_col, '💳 مبلغ فوري'),
+        (opay_col, '📱 مبلغ Opay'),
+        (officer_column, '👨‍💼 المسؤول'),
+        ('loan_number', '🔢 رقم القرض'),
+        ('inst_status', '📌 حالة القسط'),
     ]
     
     for col, name in col_mapping:
@@ -624,59 +625,67 @@ def outstanding_page():
         df_display.columns = display_names
         
         # تنسيق التاريخ
-        if 'تاريخ الاستحقاق' in df_display.columns:
-            df_display['تاريخ الاستحقاق'] = pd.to_datetime(df_display['تاريخ الاستحقاق'], errors='coerce').dt.strftime('%Y-%m-%d')
+        if '📅 تاريخ الاستحقاق' in df_display.columns:
+            df_display['📅 تاريخ الاستحقاق'] = pd.to_datetime(df_display['📅 تاريخ الاستحقاق'], errors='coerce').dt.strftime('%Y-%m-%d')
         
         # تنسيق الأرقام
-        for col in ['قيمة القسط', 'مبلغ فوري', 'مبلغ Opay']:
+        for col in ['💰 قيمة القسط', '💳 مبلغ فوري', '📱 مبلغ Opay']:
             if col in df_display.columns:
                 df_display[col] = df_display[col].apply(lambda x: f"{x:,.2f}" if pd.notna(x) and x > 0 else "0.00")
         
-        # دالة لتلوين الصفوف
+        # دالة لتلوين الصفوف حسب حالة الدفع
         def color_rows(row):
-            status = row['حالة الدفع']
-            if status == 'مسدد جزئي':
-                return ['background-color: #FFCCCC; color: #9C0006'] * len(row)
-            elif status == 'غير مدفوع':
-                return ['background-color: #FFE699; color: #7F4A00'] * len(row)
+            status = row['📊 حالة الدفع']
+            if 'مسدد جزئي' in status:
+                return ['background-color: #FFCCCC; color: #9C0006; font-weight: bold'] * len(row)
+            elif 'غير مدفوع' in status:
+                return ['background-color: #FFE699; color: #7F4A00; font-weight: bold'] * len(row)
             else:
                 return ['background-color: #E2EFDA; color: #375623'] * len(row)
         
         styled_df = df_display.style.apply(color_rows, axis=1)
         st.dataframe(styled_df, use_container_width=True, height=500)
     
-    # ملخص حسب حالة الدفع
+    # ملخص حسب حالة الدفع (بشكل جميل)
     if inst_col:
         st.markdown("### 📊 ملخص حسب حالة الدفع")
+        
         summary_df = df_acc.groupby('حالة الدفع').agg({
             inst_col: 'sum',
-            fawry_col: 'sum' if fawry_col else inst_col,
-            opay_col: 'sum' if opay_col else inst_col
         }).reset_index()
-        summary_df.columns = ['حالة الدفع', 'إجمالي المستحق', 'إجمالي فوري', 'إجمالي Opay']
+        
+        # إضافة أعمدة إضافية
+        summary_df['عدد الأقساط'] = df_acc.groupby('حالة الدفع').size().values
+        if fawry_col:
+            summary_df['إجمالي فوري'] = df_acc.groupby('حالة الدفع')[fawry_col].sum().values
+        else:
+            summary_df['إجمالي فوري'] = 0
+        if opay_col:
+            summary_df['إجمالي Opay'] = df_acc.groupby('حالة الدفع')[opay_col].sum().values
+        else:
+            summary_df['إجمالي Opay'] = 0
+        
         summary_df['إجمالي المدفوع'] = summary_df['إجمالي فوري'] + summary_df['إجمالي Opay']
-        summary_df['المتبقي'] = summary_df['إجمالي المستحق'] - summary_df['إجمالي المدفوع']
+        summary_df['المتبقي'] = summary_df[inst_col] - summary_df['إجمالي المدفوع']
+        summary_df.columns = ['حالة الدفع', 'إجمالي المستحق', 'عدد الأقساط', 'إجمالي فوري', 'إجمالي Opay', 'إجمالي المدفوع', 'المتبقي']
+        
         st.dataframe(summary_df, use_container_width=True, hide_index=True)
     
-    # ملخص حسب المسؤول
-    if is_admin and officer_column and officer_column in df_acc.columns:
+    # ملخص حسب المسؤول (يظهر للجميع)
+    if officer_column and officer_column in df_acc.columns and len(df_acc[officer_column].unique()) > 1:
         st.markdown("### 👥 ملخص حسب المسؤول")
         officer_summary = df_acc.groupby(officer_column).agg({
             inst_col: 'sum' if inst_col else 'count',
             client_col: 'count' if client_col else 'count'
         }).reset_index()
-        officer_summary.columns = ['اسم المسؤول', 'إجمالي المستحق', 'عدد الأقساط']
+        
+        # حساب نسبة التحصيل
+        officer_summary['عدد الأقساط'] = officer_summary[client_col] if client_col else officer_summary[inst_col]
+        officer_summary['متوسط القسط'] = officer_summary[inst_col] / officer_summary['عدد الأقساط']
+        officer_summary.columns = ['اسم المسؤول', 'إجمالي المستحق', 'عدد الأقساط', 'متوسط القسط']
+        officer_summary['متوسط القسط'] = officer_summary['متوسط القسط'].apply(lambda x: f"{x:,.2f}")
+        
         st.dataframe(officer_summary, use_container_width=True, hide_index=True)
-    
-    # ملخص حسب الفرع
-    if is_admin:
-        st.markdown("### 🏢 ملخص حسب الفرع")
-        branch_summary = df_acc.groupby(branch_column).agg({
-            inst_col: 'sum' if inst_col else 'count',
-            client_col: 'count' if client_col else 'count'
-        }).reset_index()
-        branch_summary.columns = ['اسم الفرع', 'إجمالي المستحق', 'عدد الأقساط']
-        st.dataframe(branch_summary, use_container_width=True, hide_index=True)
     
     # تحميل Excel
     st.sidebar.divider()
@@ -686,11 +695,11 @@ def outstanding_page():
     st.sidebar.download_button(
         label="📊 تحميل Excel ملون",
         data=excel_bytes,
-        file_name=f"الاقساط_المستحقة_{datetime.now().strftime('%Y%m%d')}.xlsx",
+        file_name=f"الاقساط_المستحقة_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         use_container_width=True
     )
-    
+
 def under_construction_page(service_name, service_icon="🔒"):
     """صفحة تحت الإنشاء"""
     if 'user' not in st.session_state:
