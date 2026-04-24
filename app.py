@@ -66,10 +66,10 @@ PROGRAMS = {
     }
 }
 
-# ===================== دالة عرض اللوجو المحسنة =====================
+# ===================== دالة عرض اللوجو المحسنة (تظهر في كل الصفحات) =====================
 
 def show_logo():
-    """عرض اللوجو بشكل بارز في أعلى يسار الصفحة"""
+    """عرض اللوجو بشكل ثابت في أعلى يسار جميع الصفحات"""
     
     # استخدام base64 لعرض الصورة بشكل أفضل
     if LOGO_PATH and os.path.exists(LOGO_PATH):
@@ -78,15 +78,17 @@ def show_logo():
             img_data = base64.b64encode(f.read()).decode()
         
         st.markdown(f"""
-            <div style="position: fixed; top: 10px; left: 10px; z-index: 999; background: transparent;">
-                <img src="data:image/png;base64,{img_data}" style="height: 70px; width: auto; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" alt="Caritas Logo">
+            <div style="position: fixed; top: 15px; left: 15px; z-index: 9999; background: rgba(255,255,255,0.95); 
+                        padding: 5px 10px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+                <img src="data:image/png;base64,{img_data}" style="height: 60px; width: auto; border-radius: 8px;" alt="Caritas Logo">
             </div>
         """, unsafe_allow_html=True)
     else:
         # نص بديل إذا لم يوجد اللوجو
         st.markdown("""
-            <div style="position: fixed; top: 10px; left: 10px; z-index: 999; background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); padding: 8px 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-                <div style="color: white; font-weight: bold; font-size: 20px;">📊 كاريتاس</div>
+            <div style="position: fixed; top: 15px; left: 15px; z-index: 9999; background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); 
+                        padding: 8px 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+                <div style="color: white; font-weight: bold; font-size: 18px;">📊 كاريتاس</div>
             </div>
         """, unsafe_allow_html=True)
 
@@ -95,13 +97,13 @@ def show_logo():
 def show_unified_header(page_title, description, show_back_button=True):
     """عرض هيدر موحد لجميع الصفحات"""
     
-    # نضيف مسافة للوجو
-    st.markdown("<div style='height: 70px;'></div>", unsafe_allow_html=True)
-    
+    # اللوجو يظهر تلقائياً من الدالة المنفصلة
     st.markdown(f"""
-        <div class="main-title">
-            <h1>{page_title}</h1>
-            <p>{description}</p>
+        <div style="margin-top: 70px;">
+            <div class="main-title">
+                <h1>{page_title}</h1>
+                <p>{description}</p>
+            </div>
         </div>
     """, unsafe_allow_html=True)
     
@@ -609,17 +611,13 @@ st.markdown("""
 def main_app():
     """الصفحة الرئيسية - تسجيل الدخول"""
     
-    # عرض اللوجو أولاً
-    show_logo()
-    
     if 'user' not in st.session_state:
-        # نضيف مسافة للوجو
-        st.markdown("<div style='height: 80px;'></div>", unsafe_allow_html=True)
-        
         st.markdown("""
-            <div class="main-title">
-                <h1>🔐 نظام كاريتاس المتكامل</h1>
-                <p>الرجاء تسجيل الدخول للوصول إلى الخدمات</p>
+            <div style="margin-top: 70px;">
+                <div class="main-title">
+                    <h1>🔐 نظام كاريتاس المتكامل</h1>
+                    <p>الرجاء تسجيل الدخول للوصول إلى الخدمات</p>
+                </div>
             </div>
         """, unsafe_allow_html=True)
         
@@ -642,13 +640,12 @@ def main_app():
     # بعد تسجيل الدخول
     user = st.session_state['user']
     
-    # نضيف مسافة للوجو
-    st.markdown("<div style='height: 80px;'></div>", unsafe_allow_html=True)
-    
     st.markdown(f"""
-        <div class="main-title">
-            <h1>🏠 مرحباً بك {user['full_name']}</h1>
-            <p>اختر الخدمة التي ترغب في استخدامها</p>
+        <div style="margin-top: 70px;">
+            <div class="main-title">
+                <h1>🏠 مرحباً بك {user['full_name']}</h1>
+                <p>اختر الخدمة التي ترغب في استخدامها</p>
+            </div>
         </div>
     """, unsafe_allow_html=True)
     
@@ -701,15 +698,16 @@ def main_app():
 
 # ===================== تشغيل التطبيق =====================
 
+# ←最重要: عرض اللوجو في بداية كل صفحة (قبل أي شيء)
+show_logo()
+
 # الحصول على معامل الصفحة
 query_params = st.query_params
 page = query_params.get("page", "home")
 
 # حماية الصفحات
 if page != "home" and 'user' not in st.session_state:
-    # عرض اللوجو في صفحة التحذير
-    show_logo()
-    st.markdown("<div style='height: 80px;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-top: 70px;'></div>", unsafe_allow_html=True)
     st.warning("⚠️ يجب تسجيل الدخول أولاً للوصول إلى هذه الصفحة")
     st.markdown("[🔐 الذهاب إلى صفحة تسجيل الدخول](/)")
     st.stop()
