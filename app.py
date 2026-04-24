@@ -418,8 +418,6 @@ def outstanding_page():
         except:
             branches_list = [branches_list]
     
-    officer_name = user.get('full_name', '')
-    
     with st.sidebar:
         st.markdown(f"### 👤 مرحباً: {user['full_name']}")
         st.markdown(f"**الدور:** {user_role}")
@@ -491,7 +489,6 @@ def outstanding_page():
     
     # فلتر اسم الاخصائي (للكل، ولكن الخيارات تأتي من النتائج الحالية)
     if officer_column and officer_column in df_acc.columns:
-        # جلب قائمة الاخصائيين من النتائج الحالية (بعد فلترة الفروع)
         officers_list = sorted(df_acc[officer_column].dropna().unique().tolist())
         if officers_list:
             selected_officer = st.sidebar.selectbox("👤 فلترة حسب الاخصائي", ["الكل"] + officers_list)
@@ -542,7 +539,7 @@ def outstanding_page():
             if branches_list:
                 st.write(f"الفروع المسموح بها للمستخدم: {branches_list}")
             if officer_column:
-                st.write(f"قيم عمود الاخصائي الفريدة:", df_raw[officer_column].dropna().unique().tolist()[:10])
+                st.write(f"قيم عمود الاخصائي الفريدة (عينة):", df_raw[officer_column].dropna().unique().tolist()[:10])
         return
     
     # تحويل المبالغ إلى numeric
@@ -646,7 +643,7 @@ def outstanding_page():
         styled_df = df_display.style.apply(color_rows, axis=1)
         st.dataframe(styled_df, use_container_width=True, height=500)
     
-    # ملخص حسب حالة الدفع (بشكل جميل)
+    # ملخص حسب حالة الدفع
     if inst_col:
         st.markdown("### 📊 ملخص حسب حالة الدفع")
         
@@ -669,23 +666,43 @@ def outstanding_page():
         summary_df['المتبقي'] = summary_df[inst_col] - summary_df['إجمالي المدفوع']
         summary_df.columns = ['حالة الدفع', 'إجمالي المستحق', 'عدد الأقساط', 'إجمالي فوري', 'إجمالي Opay', 'إجمالي المدفوع', 'المتبقي']
         
+        # تنسيق الأرقام
+        for col in ['إجمالي المستحق', 'إجمالي فوري', 'إجمالي Opay', 'إجمالي المدفوع', 'المتبقي']:
+            if col in summary_df.columns:
+                summary_df[col] = summary_df[col].apply(lambda x: f"{x:,.2f}")
+        
         st.dataframe(summary_df, use_container_width=True, hide_index=True)
     
     # ملخص حسب المسؤول (يظهر للجميع)
-    if officer_column and officer_column in df_acc.columns and len(df_acc[officer_column].unique()) > 1:
+    if officer_column and officer_column in df_acc.columns and len(df_acc[officer_column].unique()) > 0:
         st.markdown("### 👥 ملخص حسب المسؤول")
-        officer_summary = df_acc.groupby(officer_column).agg({
-            inst_col: 'sum' if inst_col else 'count',
-            client_col: 'count' if client_col else 'count'
-        }).reset_index()
         
-        # حساب نسبة التحصيل
-        officer_summary['عدد الأقساط'] = officer_summary[client_col] if client_col else officer_summary[inst_col]
-        officer_summary['متوسط القسط'] = officer_summary[inst_col] / officer_summary['عدد الأقساط']
-        officer_summary.columns = ['اسم المسؤول', 'إجمالي المستحق', 'عدد الأقساط', 'متوسط القسط']
-        officer_summary['متوسط القسط'] = officer_summary['متوسط القسط'].apply(lambda x: f"{x:,.2f}")
-        
-        st.dataframe(officer_summary, use_container_width=True, hide_index=True)
+        # تجميع البيانات بشكل آمن
+        try:
+            # حساب إجمالي المستحق لكل مسؤول
+            officer_totals = df_acc.groupby(officer_column)[inst_col].sum().reset_index()
+            officer_totals.columns = ['اسم المسؤول', 'إجمالي المستحق']
+            
+            # حساب عدد الأقساط لكل مسؤول
+            officer_counts = df_acc.groupby(officer_column).size().reset_index(name='عدد الأقساط')
+            
+            # دمج البيانات
+            officer_summary = pd.merge(officer_totals, officer_counts, on=officer_column)
+            officer_summary.columns = ['اسم المسؤول', 'إجمالي المستحق', 'عدد الأقساط']
+            
+            # حساب متوسط القسط
+            officer_summary['متوسط القسط'] = officer_summary['إجمالي المستحق'] / officer_summary['عدد الأقساط']
+            officer_summary['متوسط القسط'] = officer_summary['متوسط القسط'].apply(lambda x: f"{x:,.2f}")
+            
+            # تنسيق إجمالي المستحق
+            officer_summary['إجمالي المستحق'] = officer_summary['إجمالي المستحق'].apply(lambda x: f"{x:,.2f}")
+            
+            st.dataframe(officer_summary, use_container_width=True, hide_index=True)
+            
+        except Exception as e:
+            st.warning(f"تعذر عرض ملخص المسؤولين: {str(e)}")
+            # عرض بيانات خام بديلة
+            st.dataframe(df_acc[[officer_column, inst_col]].head(10))
     
     # تحميل Excel
     st.sidebar.divider()
