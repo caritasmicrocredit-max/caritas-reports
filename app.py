@@ -160,31 +160,44 @@ def get_logo_b64():
     return None
 
 def show_header(user=None):
-    logo_b64 = get_logo_b64()
-    logo_html = (
-        f'<img src="data:image/png;base64,{logo_b64}" alt="logo">'
-        if logo_b64 else
-        '<div style="font-size:32px">📊</div>'
-    )
-    user_html = ""
+    logo_b64  = get_logo_b64()
+    full_name = user.get("full_name", "") if user else ""
+    role      = user.get("role", "")      if user else ""
+
+    if logo_b64:
+        logo_part = (
+            "<img src='data:image/png;base64," + logo_b64 +
+            "' alt='logo' style='height:52px;border-radius:10px;'>"
+        )
+    else:
+        logo_part = "<span style='font-size:32px'>📊</span>"
+
     if user:
-        user_html = f"""
-        <div class="sys-header-user">
-            <div>👤 <strong>{user.get('full_name','')}</strong></div>
-            <div style="font-size:11px;color:#7dd3fc">{user.get('role','')}</div>
-        </div>"""
-    st.markdown(f"""
-    <div class="sys-header">
-        <div class="sys-header-logo">
-            {logo_html}
-            <div>
-                <div class="sys-header-title">نظام كاريتاس</div>
-                <div class="sys-header-sub">لوحة التقارير والمتابعة</div>
-            </div>
-        </div>
-        {user_html}
-    </div>
-    """, unsafe_allow_html=True)
+        right_part = (
+            "<div style='text-align:left;color:#bfdbfe;font-size:13px;line-height:1.8'>"
+            "<div>👤 <strong style='color:#fff'>" + full_name + "</strong></div>"
+            "<div style='font-size:11px;color:#7dd3fc'>" + role + "</div>"
+            "</div>"
+        )
+    else:
+        right_part = ""
+
+    header_html = (
+        "<div style='display:flex;align-items:center;justify-content:space-between;"
+        "background:linear-gradient(135deg,#0f172a 0%,#1e3a8a 60%,#2563eb 100%);"
+        "padding:14px 28px;border-radius:18px;margin-bottom:24px;"
+        "box-shadow:0 8px 32px rgba(30,58,138,0.25);'>"
+        "<div style='display:flex;align-items:center;gap:14px;'>"
+        + logo_part +
+        "<div>"
+        "<div style='color:#fff;font-size:22px;font-weight:800;'>نظام كاريتاس</div>"
+        "<div style='color:#93c5fd;font-size:12px;margin-top:2px;'>لوحة التقارير والمتابعة</div>"
+        "</div>"
+        "</div>"
+        + right_part +
+        "</div>"
+    )
+    st.markdown(header_html, unsafe_allow_html=True)
 
 def check_login(u, p):
     res = supabase.table("app_users").select("*").eq("id",u).eq("password_hash",p).execute()
