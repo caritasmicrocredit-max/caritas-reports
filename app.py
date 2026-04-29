@@ -11,7 +11,7 @@ from openpyxl.utils import get_column_letter
 
 # ===================== إعدادات الصفحة =====================
 st.set_page_config(
-    page_title="نظام كاريتاس",
+    page_title="نظام كاريتاس لمتابعة سداد فورى و opay",
     layout="wide",
     page_icon="📊",
     initial_sidebar_state="collapsed"
@@ -190,7 +190,7 @@ def show_header(user=None):
         "<div style='display:flex;align-items:center;gap:14px;'>"
         + logo_part +
         "<div>"
-        "<div style='color:#fff;font-size:22px;font-weight:800;'>نظام كاريتاس</div>"
+        "<div style='color:#fff;font-size:22px;font-weight:800;'>نظام كاريتاس لمتابعة سداد فورى و opay</div>"
         "<div style='color:#93c5fd;font-size:12px;margin-top:2px;'>لوحة التقارير والمتابعة</div>"
         "</div>"
         "</div>"
@@ -704,7 +704,7 @@ def main_app():
         <div style="background:linear-gradient(135deg,#0f172a 0%,#1e3a8a 100%);
                     border-radius:20px;padding:50px 20px;text-align:center;margin-bottom:30px;">
             <div style="font-size:56px;margin-bottom:10px">📊</div>
-            <div style="font-size:28px;font-weight:800;color:white;margin-bottom:6px">نظام كاريتاس</div>
+            <div style="font-size:28px;font-weight:800;color:white;margin-bottom:6px">نظام كاريتاس لمتابعة سداد فورى و opay</div>
             <div style="color:#93c5fd;font-size:14px">لوحة التقارير والمتابعة</div>
         </div>
         """,unsafe_allow_html=True)
@@ -756,7 +756,7 @@ def main_app():
     st.markdown("""
     <div style="text-align:center;margin-top:60px;padding:20px;
                 color:#94a3b8;font-size:12px;border-top:1px solid #e2e8f0;">
-        نظام كاريتاس للتقارير © 2025
+        Powered by Loans & Economic Empowerment IT Group © 2026
     </div>
     """,unsafe_allow_html=True)
 
