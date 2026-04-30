@@ -11,7 +11,7 @@ from openpyxl.utils import get_column_letter
 
 # ===================== إعدادات الصفحة =====================
 st.set_page_config(
-    page_title="نظام كاريتاس لمتابعة سداد فورى و opay",
+    page_title="نظام كاريتاس",
     layout="wide",
     page_icon="📊",
     initial_sidebar_state="collapsed"
@@ -190,7 +190,7 @@ def show_header(user=None):
         "<div style='display:flex;align-items:center;gap:14px;'>"
         + logo_part +
         "<div>"
-        "<div style='color:#fff;font-size:22px;font-weight:800;'>نظام كاريتاس لمتابعة سداد فورى و opay</div>"
+        "<div style='color:#fff;font-size:22px;font-weight:800;'>نظام كاريتاس</div>"
         "<div style='color:#93c5fd;font-size:12px;margin-top:2px;'>لوحة التقارير والمتابعة</div>"
         "</div>"
         "</div>"
@@ -619,6 +619,129 @@ def outstanding_page():
     with k3: st.markdown(f'<div class="kpi-card" style="border-top-color:#dc2626"><div class="kpi-lbl">📊 إجمالي المتبقي</div><div class="kpi-val" style="color:#dc2626">{tr:,.0f} ج.م</div></div>',unsafe_allow_html=True)
     with k4: st.markdown(f'<div class="kpi-card" style="border-top-color:#7c3aed"><div class="kpi-lbl">📋 عدد الأقساط</div><div class="kpi-val" style="color:#7c3aed">{len(df_acc):,} قسط</div></div>',unsafe_allow_html=True)
 
+    # ===== ملخص الفروع =====
+    unique_branches = df_acc[branch_col].dropna().unique().tolist()
+
+    if len(unique_branches) == 1:
+        # ── كارت فرع واحد (الصورة 2) ──
+        br_name = unique_branches[0]
+        br_inst = df_acc[inst_col].sum()  if inst_col  else 0
+        br_paid = (df_acc[fawry_col].sum() if fawry_col else 0) + (df_acc[opay_col].sum() if opay_col else 0)
+        br_rem  = br_inst - br_paid
+        br_cnt  = len(df_acc)
+
+        st.markdown(
+            "<div style='background:#fff;border-radius:16px;padding:24px 28px;"
+            "box-shadow:0 4px 20px rgba(30,58,138,0.10);border:1px solid #e0e7ff;margin-bottom:20px;'>"
+            "<div style='text-align:center;font-size:17px;font-weight:800;color:#1e3a8a;"
+            "margin-bottom:20px;border-bottom:2px solid #e0e7ff;padding-bottom:12px;'>"
+            "📍 ملخص فرع: " + br_name + "</div>"
+            "<div style='display:grid;grid-template-columns:1fr 1fr;gap:14px;'>"
+            "<div style='background:#1e3a8a;border-radius:12px;padding:16px;text-align:center;'>"
+            "<div style='color:#93c5fd;font-size:12px;margin-bottom:6px;'>إجمالي المستحق</div>"
+            "<div style='color:#fff;font-size:20px;font-weight:800;'>" + f"{br_inst:,.2f}" + " ج.م</div></div>"
+            "<div style='background:#2d6a4f;border-radius:12px;padding:16px;text-align:center;'>"
+            "<div style='color:#b7e4c7;font-size:12px;margin-bottom:6px;'>إجمالي المدفوع</div>"
+            "<div style='color:#fff;font-size:20px;font-weight:800;'>" + f"{br_paid:,.2f}" + " ج.م</div></div>"
+            "<div style='background:#c1440e;border-radius:12px;padding:16px;text-align:center;'>"
+            "<div style='color:#ffd6c0;font-size:12px;margin-bottom:6px;'>إجمالي المتبقي</div>"
+            "<div style='color:#fff;font-size:20px;font-weight:800;'>" + f"{br_rem:,.2f}" + " ج.م</div></div>"
+            "<div style='background:#5b2d8e;border-radius:12px;padding:16px;text-align:center;'>"
+            "<div style='color:#d8b4fe;font-size:12px;margin-bottom:6px;'>عدد الحالات</div>"
+            "<div style='color:#fff;font-size:20px;font-weight:800;'>" + f"{br_cnt:,}" + "</div></div>"
+            "</div></div>",
+            unsafe_allow_html=True
+        )
+
+    else:
+        # ── جدول ملخص الفروع (الصورة 1) ──
+        st.markdown('<div class="sec-title">🏢 ملخص إجمالي الفروع</div>', unsafe_allow_html=True)
+
+        grp_cols = {inst_col: 'sum'} if inst_col else {}
+        if inst_col:
+            br_sum = df_acc.groupby(branch_col).agg({inst_col: 'sum'}).reset_index()
+            br_sum.columns = ['اسم الفرع', 'إجمالي المستحق']
+        else:
+            br_sum = df_acc.groupby(branch_col).size().reset_index()
+            br_sum.columns = ['اسم الفرع', 'عدد الحالات']
+
+        br_sum['عدد الحالات'] = df_acc.groupby(branch_col).size().values
+
+        if fawry_col:
+            fs = df_acc.groupby(branch_col)[fawry_col].sum().reset_index()
+            fs.columns = ['اسم الفرع', '_fawry']
+            br_sum = br_sum.merge(fs, on='اسم الفرع', how='left')
+            br_sum['_fawry'] = br_sum['_fawry'].fillna(0)
+        else:
+            br_sum['_fawry'] = 0
+
+        if opay_col:
+            ops = df_acc.groupby(branch_col)[opay_col].sum().reset_index()
+            ops.columns = ['اسم الفرع', '_opay']
+            br_sum = br_sum.merge(ops, on='اسم الفرع', how='left')
+            br_sum['_opay'] = br_sum['_opay'].fillna(0)
+        else:
+            br_sum['_opay'] = 0
+
+        br_sum['إجمالي المدفوع'] = br_sum['_fawry'] + br_sum['_opay']
+        br_sum['إجمالي المتبقي'] = br_sum['إجمالي المستحق'] - br_sum['إجمالي المدفوع']
+        br_sum = br_sum.drop(columns=['_fawry', '_opay'])
+        br_sum = br_sum.sort_values('إجمالي المستحق', ascending=False)
+
+        # صف الإجمالي الكلي
+        total_row = {
+            'اسم الفرع':        'الإجمالي الكلي',
+            'عدد الحالات':      br_sum['عدد الحالات'].sum(),
+            'إجمالي المستحق':   br_sum['إجمالي المستحق'].sum(),
+            'إجمالي المدفوع':   br_sum['إجمالي المدفوع'].sum(),
+            'إجمالي المتبقي':   br_sum['إجمالي المتبقي'].sum(),
+        }
+        br_sum_display = br_sum.copy()
+        for c in ['إجمالي المستحق', 'إجمالي المدفوع', 'إجمالي المتبقي']:
+            br_sum_display[c] = br_sum_display[c].apply(lambda x: f"{x:,.2f}")
+
+        # رسم الجدول بـ HTML
+        rows_html = ""
+        for _, row in br_sum_display.iterrows():
+            rows_html += (
+                "<tr>"
+                "<td style='padding:10px 14px;text-align:right;border-bottom:1px solid #e2e8f0;'>" + str(row['اسم الفرع']) + "</td>"
+                "<td style='padding:10px 14px;text-align:center;border-bottom:1px solid #e2e8f0;font-weight:700;color:#1e3a8a;'>" + str(int(row['عدد الحالات'])) + "</td>"
+                "<td style='padding:10px 14px;text-align:center;border-bottom:1px solid #e2e8f0;color:#1e3a8a;font-weight:600;'>" + str(row['إجمالي المستحق']) + "</td>"
+                "<td style='padding:10px 14px;text-align:center;border-bottom:1px solid #e2e8f0;color:#059669;font-weight:600;'>" + str(row['إجمالي المدفوع']) + "</td>"
+                "<td style='padding:10px 14px;text-align:center;border-bottom:1px solid #e2e8f0;color:#dc2626;font-weight:600;'>" + str(row['إجمالي المتبقي']) + "</td>"
+                "</tr>"
+            )
+
+        # صف الإجمالي
+        rows_html += (
+            "<tr style='background:#1e3a8a;'>"
+            "<td style='padding:12px 14px;text-align:right;color:#fff;font-weight:800;border-radius:0 0 0 12px;'>الإجمالي الكلي</td>"
+            "<td style='padding:12px 14px;text-align:center;color:#fff;font-weight:800;'>" + f"{int(total_row['عدد الحالات']):,}" + "</td>"
+            "<td style='padding:12px 14px;text-align:center;color:#fbbf24;font-weight:800;'>" + f"{total_row['إجمالي المستحق']:,.2f}" + "</td>"
+            "<td style='padding:12px 14px;text-align:center;color:#6ee7b7;font-weight:800;'>" + f"{total_row['إجمالي المدفوع']:,.2f}" + "</td>"
+            "<td style='padding:12px 14px;text-align:center;color:#fca5a5;font-weight:800;border-radius:0 0 12px 0;'>" + f"{total_row['إجمالي المتبقي']:,.2f}" + "</td>"
+            "</tr>"
+        )
+
+        table_html = (
+            "<div style='overflow-x:auto;margin-bottom:20px;'>"
+            "<table style='width:100%;border-collapse:collapse;background:#fff;"
+            "border-radius:14px;overflow:hidden;box-shadow:0 4px 20px rgba(30,58,138,0.10);'>"
+            "<thead>"
+            "<tr style='background:#1e3a8a;'>"
+            "<th style='padding:14px;text-align:right;color:#fff;font-size:14px;'>اسم الفرع</th>"
+            "<th style='padding:14px;text-align:center;color:#fff;font-size:14px;'>عدد الحالات</th>"
+            "<th style='padding:14px;text-align:center;color:#fff;font-size:14px;'>إجمالي المستحق</th>"
+            "<th style='padding:14px;text-align:center;color:#fff;font-size:14px;'>إجمالي المدفوع</th>"
+            "<th style='padding:14px;text-align:center;color:#fff;font-size:14px;'>إجمالي المتبقي</th>"
+            "</tr>"
+            "</thead>"
+            "<tbody>" + rows_html + "</tbody>"
+            "</table></div>"
+        )
+        st.markdown(table_html, unsafe_allow_html=True)
+
     st.markdown('<div class="sec-title">📋 جدول الأقساط المستحقة</div>',unsafe_allow_html=True)
     col_map=[
         ('حالة الدفع','📊 حالة الدفع'),(branch_col,'🏢 اسم الفرع'),
@@ -704,7 +827,7 @@ def main_app():
         <div style="background:linear-gradient(135deg,#0f172a 0%,#1e3a8a 100%);
                     border-radius:20px;padding:50px 20px;text-align:center;margin-bottom:30px;">
             <div style="font-size:56px;margin-bottom:10px">📊</div>
-            <div style="font-size:28px;font-weight:800;color:white;margin-bottom:6px">نظام كاريتاس لمتابعة سداد فورى و opay</div>
+            <div style="font-size:28px;font-weight:800;color:white;margin-bottom:6px">نظام كاريتاس</div>
             <div style="color:#93c5fd;font-size:14px">لوحة التقارير والمتابعة</div>
         </div>
         """,unsafe_allow_html=True)
@@ -756,7 +879,7 @@ def main_app():
     st.markdown("""
     <div style="text-align:center;margin-top:60px;padding:20px;
                 color:#94a3b8;font-size:12px;border-top:1px solid #e2e8f0;">
-        Powered by Loans & Economic Empowerment IT Group © 2026
+        نظام كاريتاس للتقارير © 2025
     </div>
     """,unsafe_allow_html=True)
 
