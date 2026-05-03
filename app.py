@@ -591,33 +591,107 @@ def outstanding_page():
     if df_acc.empty:
         st.warning("⚠️ لا توجد بيانات تطابق معايير البحث"); return
 
-    for c in [inst_col,fawry_col,opay_col]:
-        if c: df_acc[c]=pd.to_numeric(df_acc[c],errors='coerce').fillna(0)
+    # ── تحويل الأعمدة لـ numeric ──
+    for c in [inst_col, fawry_col, opay_col]:
+        if c: df_acc[c] = pd.to_numeric(df_acc[c], errors='coerce').fillna(0)
 
+    # ── حساب المدفوع والمتبقي لكل صف بشكل صريح ──
+    df_acc['_paid'] = (
+        (df_acc[fawry_col] if fawry_col else 0) +
+        (df_acc[opay_col]  if opay_col  else 0)
+    )
+    df_acc['_inst'] = df_acc[inst_col] if inst_col else 0
+    # المتبقي لكل صف = القسط - المدفوع (لا يقل عن صفر)
+    df_acc['_remaining'] = (df_acc['_inst'] - df_acc['_paid']).clip(lower=0)
+
+    # ── تحديد الحالة بناءً على الأعمدة المحسوبة ──
     def get_status(row):
-        fp=row.get(fawry_col,0) if fawry_col else 0
-        op=row.get(opay_col, 0) if opay_col  else 0
-        tp=(fp if pd.notna(fp) else 0)+(op if pd.notna(op) else 0)
-        ia=row.get(inst_col,0) if inst_col and pd.notna(row.get(inst_col)) else 0
-        if tp>=ia and ia>0: return "✅ مدفوع بالكامل"
-        elif tp>0:          return "⚠️ مسدد جزئي"
-        else:               return "❌ غير مدفوع"
+        paid = row['_paid']
+        inst = row['_inst']
+        if inst <= 0:            return "❌ غير مدفوع"
+        if paid >= inst:         return "✅ مدفوع بالكامل"
+        elif paid > 0:           return "⚠️ مسدد جزئي"
+        else:                    return "❌ غير مدفوع"
 
-    df_acc['حالة الدفع']=df_acc.apply(get_status,axis=1)
-    status_order={"✅ مدفوع بالكامل":0,"⚠️ مسدد جزئي":1,"❌ غير مدفوع":2}
-    df_acc['_sk']=df_acc['حالة الدفع'].map(status_order)
-    df_acc=df_acc.sort_values('_sk').drop('_sk',axis=1)
+    df_acc['حالة الدفع'] = df_acc.apply(get_status, axis=1)
+    status_order = {"✅ مدفوع بالكامل": 0, "⚠️ مسدد جزئي": 1, "❌ غير مدفوع": 2}
+    df_acc['_sk'] = df_acc['حالة الدفع'].map(status_order)
+    df_acc = df_acc.sort_values('_sk').drop('_sk', axis=1)
 
-    ti=df_acc[inst_col].sum()  if inst_col  else 0
-    tf=df_acc[fawry_col].sum() if fawry_col else 0
-    to=df_acc[opay_col].sum()  if opay_col  else 0
-    tp=tf+to; tr=ti-tp
+    # ── الإحصائيات الكلية من الأعمدة المحسوبة ──
+    ti = df_acc['_inst'].sum()
+    tp = df_acc['_paid'].sum()
+    tr = df_acc['_remaining'].sum()   # مجموع المتبقي الحقيقي لكل صف
 
-    k1,k2,k3,k4=st.columns(4)
-    with k1: st.markdown(f'<div class="kpi-card"><div class="kpi-lbl">💰 إجمالي المستحق</div><div class="kpi-val">{ti:,.0f} ج.م</div></div>',unsafe_allow_html=True)
-    with k2: st.markdown(f'<div class="kpi-card" style="border-top-color:#059669"><div class="kpi-lbl">💳 إجمالي المدفوع</div><div class="kpi-val" style="color:#059669">{tp:,.0f} ج.م</div></div>',unsafe_allow_html=True)
-    with k3: st.markdown(f'<div class="kpi-card" style="border-top-color:#dc2626"><div class="kpi-lbl">📊 إجمالي المتبقي</div><div class="kpi-val" style="color:#dc2626">{tr:,.0f} ج.م</div></div>',unsafe_allow_html=True)
-    with k4: st.markdown(f'<div class="kpi-card" style="border-top-color:#7c3aed"><div class="kpi-lbl">📋 عدد الأقساط</div><div class="kpi-val" style="color:#7c3aed">{len(df_acc):,} قسط</div></div>',unsafe_allow_html=True)
+    # إحصائيات المسدد جزئي
+    df_partial   = df_acc[df_acc['حالة الدفع'] == "⚠️ مسدد جزئي"]
+    partial_cnt  = len(df_partial)
+    partial_paid = df_partial['_paid'].sum()
+    partial_rem  = df_partial['_remaining'].sum()
+
+    # إحصائيات غير المدفوع
+    df_unpaid  = df_acc[df_acc['حالة الدفع'] == "❌ غير مدفوع"]
+    unpaid_cnt = len(df_unpaid)
+
+    # ── KPIs ──
+    k1,k2,k3,k4 = st.columns(4)
+    with k1:
+        st.markdown(
+            f'''<div class="kpi-card">
+                <div class="kpi-lbl">💰 إجمالي المستحق</div>
+                <div class="kpi-val">{ti:,.0f} ج.م</div>
+                <div style="font-size:11px;color:#64748b;margin-top:4px">{len(df_acc):,} قسط</div>
+            </div>''', unsafe_allow_html=True)
+    with k2:
+        st.markdown(
+            f'''<div class="kpi-card" style="border-top-color:#059669">
+                <div class="kpi-lbl">💳 إجمالي المدفوع</div>
+                <div class="kpi-val" style="color:#059669">{tp:,.0f} ج.م</div>
+                <div style="font-size:11px;color:#059669;margin-top:4px">
+                    {len(df_acc[df_acc["حالة الدفع"]=="✅ مدفوع بالكامل"]):,} مكتمل
+                </div>
+            </div>''', unsafe_allow_html=True)
+    with k3:
+        st.markdown(
+            f'''<div class="kpi-card" style="border-top-color:#dc2626">
+                <div class="kpi-lbl">📊 إجمالي المتبقي</div>
+                <div class="kpi-val" style="color:#dc2626">{tr:,.0f} ج.م</div>
+                <div style="font-size:11px;color:#dc2626;margin-top:4px">
+                    يشمل السداد الجزئي
+                </div>
+            </div>''', unsafe_allow_html=True)
+    with k4:
+        partial_color = "#f59e0b" if partial_cnt > 0 else "#7c3aed"
+        st.markdown(
+            f'''<div class="kpi-card" style="border-top-color:{partial_color}">
+                <div class="kpi-lbl">⚠️ مسدد جزئي</div>
+                <div class="kpi-val" style="color:{partial_color}">{partial_cnt:,} قسط</div>
+                <div style="font-size:11px;color:{partial_color};margin-top:4px">
+                    متبقي: {partial_rem:,.0f} ج.م
+                </div>
+            </div>''', unsafe_allow_html=True)
+
+    # ── بانر تحذير لو في مسدد جزئي ──
+    if partial_cnt > 0:
+        st.markdown(
+            f'''<div style="background:linear-gradient(90deg,#fffbeb,#fef3c7);
+                        border:1.5px solid #f59e0b;border-right:5px solid #f59e0b;
+                        border-radius:12px;padding:14px 20px;margin:14px 0;
+                        display:flex;align-items:center;gap:12px;">
+                <div style="font-size:24px">⚠️</div>
+                <div>
+                    <div style="font-weight:800;color:#92400e;font-size:14px">
+                        يوجد {partial_cnt:,} قسط مسدد جزئياً — لم يكتمل السداد بعد
+                    </div>
+                    <div style="color:#b45309;font-size:12px;margin-top:3px">
+                        إجمالي ما تم سداده جزئياً: <strong>{partial_paid:,.2f} ج.م</strong>
+                        &nbsp;|&nbsp;
+                        إجمالي المتبقي منهم: <strong>{partial_rem:,.2f} ج.م</strong>
+                        &nbsp;|&nbsp;
+                        غير المدفوع كلياً: <strong>{unpaid_cnt:,} قسط</strong>
+                    </div>
+                </div>
+            </div>''', unsafe_allow_html=True)
 
     # ===== ملخص الفروع =====
     unique_branches = df_acc[branch_col].dropna().unique().tolist()
@@ -684,8 +758,12 @@ def outstanding_page():
             br_sum['_opay'] = 0
 
         br_sum['إجمالي المدفوع'] = br_sum['_fawry'] + br_sum['_opay']
-        br_sum['إجمالي المتبقي'] = br_sum['إجمالي المستحق'] - br_sum['إجمالي المدفوع']
         br_sum = br_sum.drop(columns=['_fawry', '_opay'])
+        # المتبقي الحقيقي = مجموع _remaining لكل فرع (يشمل المسدد جزئي)
+        br_rem = df_acc.groupby(branch_col)['_remaining'].sum().reset_index()
+        br_rem.columns = ['اسم الفرع', 'إجمالي المتبقي']
+        br_sum = br_sum.merge(br_rem, on='اسم الفرع', how='left')
+        br_sum['إجمالي المتبقي'] = br_sum['إجمالي المتبقي'].fillna(0)
         br_sum = br_sum.sort_values('إجمالي المستحق', ascending=False)
 
         # صف الإجمالي الكلي
@@ -776,7 +854,11 @@ def outstanding_page():
             sm['إجمالي فوري']=df_acc.groupby('حالة الدفع')[fawry_col].sum().values if fawry_col else 0
             sm['إجمالي Opay']=df_acc.groupby('حالة الدفع')[opay_col].sum().values  if opay_col  else 0
             sm['إجمالي المدفوع']=sm['إجمالي فوري']+sm['إجمالي Opay']
-            sm['المتبقي']=sm[inst_col]-sm['إجمالي المدفوع']
+            # المتبقي من _remaining (يعكس المسدد جزئي بشكل صحيح)
+            rem_by_status = df_acc.groupby('حالة الدفع')['_remaining'].sum().reset_index()
+            rem_by_status.columns = ['حالة الدفع', 'المتبقي']
+            sm = sm.merge(rem_by_status, on='حالة الدفع', how='left')
+            sm['المتبقي'] = sm['المتبقي'].fillna(0)
             sm.columns=['حالة الدفع','إجمالي المستحق','عدد الأقساط','إجمالي فوري','إجمالي Opay','إجمالي المدفوع','المتبقي']
             for c in ['إجمالي المستحق','إجمالي فوري','إجمالي Opay','إجمالي المدفوع','المتبقي']:
                 sm[c]=sm[c].apply(lambda x:f"{x:,.2f}")
@@ -801,7 +883,11 @@ def outstanding_page():
                     os_=os_.merge(ops,on='اسم المسؤول',how='left'); os_['إجمالي Opay']=os_['إجمالي Opay'].fillna(0)
                 else: os_['إجمالي Opay']=0
                 os_['إجمالي المدفوع']=os_['إجمالي فوري']+os_['إجمالي Opay']
-                os_['المتبقي']=os_['إجمالي المستحق']-os_['إجمالي المدفوع']
+                # المتبقي الحقيقي من _remaining
+                rem_off = df_acc.groupby(ofc)['_remaining'].sum().reset_index()
+                rem_off.columns = ['اسم المسؤول', 'المتبقي']
+                os_ = os_.merge(rem_off, on='اسم المسؤول', how='left')
+                os_['المتبقي'] = os_['المتبقي'].fillna(0)
                 os_['متوسط القسط']=os_['إجمالي المستحق']/os_['عدد الأقساط']
                 for c in ['إجمالي المستحق','إجمالي فوري','إجمالي Opay','إجمالي المدفوع','المتبقي','متوسط القسط']:
                     os_[c]=os_[c].apply(lambda x:f"{x:,.2f}")
