@@ -536,7 +536,7 @@ def outstanding_page():
     branch_col  = find_col(df_raw,['branch_name','Branch_name','اسم الفرع','branch','Branch'])
     officer_col = find_col(df_raw,['officer_name','Officer_name','اسم المسؤول','officer','Officer','emp_name','employee_name'])
     inst_col    = find_col(df_raw,['inst_amount','قيمة القسط','amount','inst_amt'])
-    fawry_col   = find_col(df_raw,['fawry_amount','fawry_amt','Amount'])
+    fawry_col   = find_col(df_raw,['fawry_amount','fawry_amt'])
     opay_col    = find_col(df_raw,['opay_amount','opay_amt','opayAmount'])
     client_col  = find_col(df_raw,['client_name','اسم العميل','client','name'])
     nation_col  = find_col(df_raw,['nation_id','الرقم القومي','nation','national_id'])
@@ -595,39 +595,41 @@ def outstanding_page():
     for c in [inst_col, fawry_col, opay_col]:
         if c: df_acc[c] = pd.to_numeric(df_acc[c], errors='coerce').fillna(0)
 
-    # ── حساب المدفوع والمتبقي لكل صف بشكل صريح ──
-    df_acc['_paid'] = (
-        (df_acc[fawry_col] if fawry_col else 0) +
-        (df_acc[opay_col]  if opay_col  else 0)
-    )
-    df_acc['_inst'] = df_acc[inst_col] if inst_col else 0
-    # المتبقي لكل صف = القسط - المدفوع (لا يقل عن صفر)
+    # ── حساب المدفوع لكل صف = فوري + Opay ──
+    fawry_series = df_acc[fawry_col] if fawry_col else pd.Series(0, index=df_acc.index)
+    opay_series  = df_acc[opay_col]  if opay_col  else pd.Series(0, index=df_acc.index)
+    inst_series  = df_acc[inst_col]  if inst_col  else pd.Series(0, index=df_acc.index)
+
+    df_acc['_paid']      = fawry_series + opay_series
+    df_acc['_inst']      = inst_series
+    # المتبقي لكل صف = القسط - المدفوع الفعلي (مش كامل القسط لو في سداد جزئي)
     df_acc['_remaining'] = (df_acc['_inst'] - df_acc['_paid']).clip(lower=0)
 
-    # ── تحديد الحالة بناءً على الأعمدة المحسوبة ──
+    # ── تحديد الحالة ──
     def get_status(row):
         paid = row['_paid']
         inst = row['_inst']
-        if inst <= 0:            return "❌ غير مدفوع"
-        if paid >= inst:         return "✅ مدفوع بالكامل"
-        elif paid > 0:           return "⚠️ مسدد جزئي"
-        else:                    return "❌ غير مدفوع"
+        if inst <= 0:    return "❌ غير مدفوع"
+        if paid >= inst: return "✅ مدفوع بالكامل"
+        elif paid > 0:   return "⚠️ مسدد جزئي"
+        else:            return "❌ غير مدفوع"
 
     df_acc['حالة الدفع'] = df_acc.apply(get_status, axis=1)
     status_order = {"✅ مدفوع بالكامل": 0, "⚠️ مسدد جزئي": 1, "❌ غير مدفوع": 2}
     df_acc['_sk'] = df_acc['حالة الدفع'].map(status_order)
     df_acc = df_acc.sort_values('_sk').drop('_sk', axis=1)
 
-    # ── الإحصائيات الكلية من الأعمدة المحسوبة ──
-    ti = df_acc['_inst'].sum()
-    tp = df_acc['_paid'].sum()
-    tr = df_acc['_remaining'].sum()   # مجموع المتبقي الحقيقي لكل صف
+    # ── الإحصائيات الكلية ──
+    ti = df_acc['_inst'].sum()               # إجمالي المستحق
+    tp = df_acc['_paid'].sum()               # إجمالي المدفوع فعلاً (يشمل الجزئي)
+    tr = ti - tp                             # المتبقي = المستحق - المدفوع الفعلي
 
     # إحصائيات المسدد جزئي
     df_partial   = df_acc[df_acc['حالة الدفع'] == "⚠️ مسدد جزئي"]
     partial_cnt  = len(df_partial)
     partial_paid = df_partial['_paid'].sum()
-    partial_rem  = df_partial['_remaining'].sum()
+    # المتبقي من الجزئي = قيمة الأقساط - ما اتسدد منها فعلاً
+    partial_rem  = df_partial['_inst'].sum() - df_partial['_paid'].sum()
 
     # إحصائيات غير المدفوع
     df_unpaid  = df_acc[df_acc['حالة الدفع'] == "❌ غير مدفوع"]
@@ -696,129 +698,133 @@ def outstanding_page():
     # ===== ملخص الفروع =====
     unique_branches = df_acc[branch_col].dropna().unique().tolist()
 
-    if len(unique_branches) == 1:
-        # ── كارت فرع واحد (الصورة 2) ──
-        br_name = unique_branches[0]
-        br_inst = df_acc[inst_col].sum()  if inst_col  else 0
-        br_paid = (df_acc[fawry_col].sum() if fawry_col else 0) + (df_acc[opay_col].sum() if opay_col else 0)
-        br_rem  = br_inst - br_paid
-        br_cnt  = len(df_acc)
+    def build_branch_table(df_data, title_prefix=""):
+        """بناء جدول ملخص الفروع التفصيلي"""
 
-        st.markdown(
-            "<div style='background:#fff;border-radius:16px;padding:24px 28px;"
-            "box-shadow:0 4px 20px rgba(30,58,138,0.10);border:1px solid #e0e7ff;margin-bottom:20px;'>"
-            "<div style='text-align:center;font-size:17px;font-weight:800;color:#1e3a8a;"
-            "margin-bottom:20px;border-bottom:2px solid #e0e7ff;padding-bottom:12px;'>"
-            "📍 ملخص فرع: " + br_name + "</div>"
-            "<div style='display:grid;grid-template-columns:1fr 1fr;gap:14px;'>"
-            "<div style='background:#1e3a8a;border-radius:12px;padding:16px;text-align:center;'>"
-            "<div style='color:#93c5fd;font-size:12px;margin-bottom:6px;'>إجمالي المستحق</div>"
-            "<div style='color:#fff;font-size:20px;font-weight:800;'>" + f"{br_inst:,.2f}" + " ج.م</div></div>"
-            "<div style='background:#2d6a4f;border-radius:12px;padding:16px;text-align:center;'>"
-            "<div style='color:#b7e4c7;font-size:12px;margin-bottom:6px;'>إجمالي المدفوع</div>"
-            "<div style='color:#fff;font-size:20px;font-weight:800;'>" + f"{br_paid:,.2f}" + " ج.م</div></div>"
-            "<div style='background:#c1440e;border-radius:12px;padding:16px;text-align:center;'>"
-            "<div style='color:#ffd6c0;font-size:12px;margin-bottom:6px;'>إجمالي المتبقي</div>"
-            "<div style='color:#fff;font-size:20px;font-weight:800;'>" + f"{br_rem:,.2f}" + " ج.م</div></div>"
-            "<div style='background:#5b2d8e;border-radius:12px;padding:16px;text-align:center;'>"
-            "<div style='color:#d8b4fe;font-size:12px;margin-bottom:6px;'>عدد الحالات</div>"
-            "<div style='color:#fff;font-size:20px;font-weight:800;'>" + f"{br_cnt:,}" + "</div></div>"
-            "</div></div>",
-            unsafe_allow_html=True
-        )
+        # ── تجميع البيانات لكل فرع ──
+        rows = []
+        for br in sorted(df_data[branch_col].dropna().unique()):
+            df_br = df_data[df_data[branch_col] == br]
+            df_full    = df_br[df_br['حالة الدفع'] == "✅ مدفوع بالكامل"]
+            df_part    = df_br[df_br['حالة الدفع'] == "⚠️ مسدد جزئي"]
+            df_unp     = df_br[df_br['حالة الدفع'] == "❌ غير مدفوع"]
 
-    else:
-        # ── جدول ملخص الفروع (الصورة 1) ──
-        st.markdown('<div class="sec-title">🏢 ملخص إجمالي الفروع</div>', unsafe_allow_html=True)
+            inst_total = df_br['_inst'].sum()
+            paid_full  = df_full['_paid'].sum()   # ما اتسدد كاملاً
+            paid_part  = df_part['_paid'].sum()   # ما اتسدد جزئياً
+            remaining  = inst_total - (paid_full + paid_part)
 
-        grp_cols = {inst_col: 'sum'} if inst_col else {}
-        if inst_col:
-            br_sum = df_acc.groupby(branch_col).agg({inst_col: 'sum'}).reset_index()
-            br_sum.columns = ['اسم الفرع', 'إجمالي المستحق']
-        else:
-            br_sum = df_acc.groupby(branch_col).size().reset_index()
-            br_sum.columns = ['اسم الفرع', 'عدد الحالات']
+            rows.append({
+                'اسم الفرع':            br,
+                'عدد الكل':             len(df_br),
+                'مسدد بالكامل (عدد)':   len(df_full),
+                'مسدد جزئياً (عدد)':    len(df_part),
+                'غير مدفوع (عدد)':      len(df_unp),
+                'إجمالي المستحق':        inst_total,
+                'إجمالي المسدد كلياً':   paid_full,
+                'إجمالي المسدد جزئياً':  paid_part,
+                'إجمالي المتبقي':        remaining,
+            })
 
-        br_sum['عدد الحالات'] = df_acc.groupby(branch_col).size().values
+        if not rows:
+            return
 
-        if fawry_col:
-            fs = df_acc.groupby(branch_col)[fawry_col].sum().reset_index()
-            fs.columns = ['اسم الفرع', '_fawry']
-            br_sum = br_sum.merge(fs, on='اسم الفرع', how='left')
-            br_sum['_fawry'] = br_sum['_fawry'].fillna(0)
-        else:
-            br_sum['_fawry'] = 0
+        df_tbl = pd.DataFrame(rows).sort_values('إجمالي المستحق', ascending=False)
 
-        if opay_col:
-            ops = df_acc.groupby(branch_col)[opay_col].sum().reset_index()
-            ops.columns = ['اسم الفرع', '_opay']
-            br_sum = br_sum.merge(ops, on='اسم الفرع', how='left')
-            br_sum['_opay'] = br_sum['_opay'].fillna(0)
-        else:
-            br_sum['_opay'] = 0
-
-        br_sum['إجمالي المدفوع'] = br_sum['_fawry'] + br_sum['_opay']
-        br_sum = br_sum.drop(columns=['_fawry', '_opay'])
-        # المتبقي الحقيقي = مجموع _remaining لكل فرع (يشمل المسدد جزئي)
-        br_rem = df_acc.groupby(branch_col)['_remaining'].sum().reset_index()
-        br_rem.columns = ['اسم الفرع', 'إجمالي المتبقي']
-        br_sum = br_sum.merge(br_rem, on='اسم الفرع', how='left')
-        br_sum['إجمالي المتبقي'] = br_sum['إجمالي المتبقي'].fillna(0)
-        br_sum = br_sum.sort_values('إجمالي المستحق', ascending=False)
-
-        # صف الإجمالي الكلي
-        total_row = {
-            'اسم الفرع':        'الإجمالي الكلي',
-            'عدد الحالات':      br_sum['عدد الحالات'].sum(),
-            'إجمالي المستحق':   br_sum['إجمالي المستحق'].sum(),
-            'إجمالي المدفوع':   br_sum['إجمالي المدفوع'].sum(),
-            'إجمالي المتبقي':   br_sum['إجمالي المتبقي'].sum(),
+        # ── صف الإجمالي ──
+        tot = {
+            'اسم الفرع':            'الإجمالي الكلي',
+            'عدد الكل':             df_tbl['عدد الكل'].sum(),
+            'مسدد بالكامل (عدد)':   df_tbl['مسدد بالكامل (عدد)'].sum(),
+            'مسدد جزئياً (عدد)':    df_tbl['مسدد جزئياً (عدد)'].sum(),
+            'غير مدفوع (عدد)':      df_tbl['غير مدفوع (عدد)'].sum(),
+            'إجمالي المستحق':        df_tbl['إجمالي المستحق'].sum(),
+            'إجمالي المسدد كلياً':   df_tbl['إجمالي المسدد كلياً'].sum(),
+            'إجمالي المسدد جزئياً':  df_tbl['إجمالي المسدد جزئياً'].sum(),
+            'إجمالي المتبقي':        df_tbl['إجمالي المتبقي'].sum(),
         }
-        br_sum_display = br_sum.copy()
-        for c in ['إجمالي المستحق', 'إجمالي المدفوع', 'إجمالي المتبقي']:
-            br_sum_display[c] = br_sum_display[c].apply(lambda x: f"{x:,.2f}")
 
-        # رسم الجدول بـ HTML
-        rows_html = ""
-        for _, row in br_sum_display.iterrows():
-            rows_html += (
+        # ── رسم الجدول HTML ──
+        def td(val, color='#1e293b', bold=False, bg=''):
+            fw  = 'font-weight:700;' if bold else 'font-weight:500;'
+            bgc = f'background:{bg};' if bg else ''
+            return f"<td style='padding:10px 12px;text-align:center;border-bottom:1px solid #e2e8f0;color:{color};{fw}{bgc}'>{val}</td>"
+
+        def td_r(val, color='#1e293b', bold=False):
+            fw = 'font-weight:700;' if bold else 'font-weight:500;'
+            return f"<td style='padding:10px 14px;text-align:right;border-bottom:1px solid #e2e8f0;color:{color};{fw}'>{val}</td>"
+
+        def fmt(v): return f"{v:,.2f}"
+        def fmti(v): return f"{int(v):,}"
+
+        body = ""
+        for _, r in df_tbl.iterrows():
+            body += (
                 "<tr>"
-                "<td style='padding:10px 14px;text-align:right;border-bottom:1px solid #e2e8f0;'>" + str(row['اسم الفرع']) + "</td>"
-                "<td style='padding:10px 14px;text-align:center;border-bottom:1px solid #e2e8f0;font-weight:700;color:#1e3a8a;'>" + str(int(row['عدد الحالات'])) + "</td>"
-                "<td style='padding:10px 14px;text-align:center;border-bottom:1px solid #e2e8f0;color:#1e3a8a;font-weight:600;'>" + str(row['إجمالي المستحق']) + "</td>"
-                "<td style='padding:10px 14px;text-align:center;border-bottom:1px solid #e2e8f0;color:#059669;font-weight:600;'>" + str(row['إجمالي المدفوع']) + "</td>"
-                "<td style='padding:10px 14px;text-align:center;border-bottom:1px solid #e2e8f0;color:#dc2626;font-weight:600;'>" + str(row['إجمالي المتبقي']) + "</td>"
-                "</tr>"
+                + td_r(r['اسم الفرع'], '#1e3a8a', True)
+                + td(fmti(r['عدد الكل']), '#1e3a8a', True)
+                + td(fmti(r['مسدد بالكامل (عدد)']), '#059669', True, '#f0fdf4')
+                + td(fmti(r['مسدد جزئياً (عدد)']), '#d97706', True, '#fffbeb')
+                + td(fmti(r['غير مدفوع (عدد)']),   '#dc2626', True, '#fef2f2')
+                + td(fmt(r['إجمالي المستحق']),       '#1e3a8a')
+                + td(fmt(r['إجمالي المسدد كلياً']),  '#059669')
+                + td(fmt(r['إجمالي المسدد جزئياً']), '#d97706')
+                + td(fmt(r['إجمالي المتبقي']),       '#dc2626', True)
+                + "</tr>"
             )
 
         # صف الإجمالي
-        rows_html += (
+        body += (
+            "<tr style='background:#0f172a;'>"
+            f"<td style='padding:12px 14px;text-align:right;color:#fff;font-weight:800;'>الإجمالي الكلي</td>"
+            f"<td style='padding:12px;text-align:center;color:#fff;font-weight:800;'>{fmti(tot['عدد الكل'])}</td>"
+            f"<td style='padding:12px;text-align:center;color:#6ee7b7;font-weight:800;'>{fmti(tot['مسدد بالكامل (عدد)'])}</td>"
+            f"<td style='padding:12px;text-align:center;color:#fde68a;font-weight:800;'>{fmti(tot['مسدد جزئياً (عدد)'])}</td>"
+            f"<td style='padding:12px;text-align:center;color:#fca5a5;font-weight:800;'>{fmti(tot['غير مدفوع (عدد)'])}</td>"
+            f"<td style='padding:12px;text-align:center;color:#93c5fd;font-weight:800;'>{fmt(tot['إجمالي المستحق'])}</td>"
+            f"<td style='padding:12px;text-align:center;color:#6ee7b7;font-weight:800;'>{fmt(tot['إجمالي المسدد كلياً'])}</td>"
+            f"<td style='padding:12px;text-align:center;color:#fde68a;font-weight:800;'>{fmt(tot['إجمالي المسدد جزئياً'])}</td>"
+            f"<td style='padding:12px;text-align:center;color:#fca5a5;font-weight:800;'>{fmt(tot['إجمالي المتبقي'])}</td>"
+            "</tr>"
+        )
+
+        th_style = "padding:13px 12px;text-align:center;color:#fff;font-size:13px;font-weight:700;white-space:nowrap;"
+        th_style_r = "padding:13px 14px;text-align:right;color:#fff;font-size:13px;font-weight:700;"
+        header = (
             "<tr style='background:#1e3a8a;'>"
-            "<td style='padding:12px 14px;text-align:right;color:#fff;font-weight:800;border-radius:0 0 0 12px;'>الإجمالي الكلي</td>"
-            "<td style='padding:12px 14px;text-align:center;color:#fff;font-weight:800;'>" + f"{int(total_row['عدد الحالات']):,}" + "</td>"
-            "<td style='padding:12px 14px;text-align:center;color:#fbbf24;font-weight:800;'>" + f"{total_row['إجمالي المستحق']:,.2f}" + "</td>"
-            "<td style='padding:12px 14px;text-align:center;color:#6ee7b7;font-weight:800;'>" + f"{total_row['إجمالي المدفوع']:,.2f}" + "</td>"
-            "<td style='padding:12px 14px;text-align:center;color:#fca5a5;font-weight:800;border-radius:0 0 12px 0;'>" + f"{total_row['إجمالي المتبقي']:,.2f}" + "</td>"
+            f"<th style='{th_style_r}'>اسم الفرع</th>"
+            f"<th style='{th_style}'>عدد الكل</th>"
+            f"<th style='{th_style}; background:#166534;'>✅ مسدد بالكامل</th>"
+            f"<th style='{th_style}; background:#92400e;'>⚠️ مسدد جزئياً</th>"
+            f"<th style='{th_style}; background:#991b1b;'>❌ غير مدفوع</th>"
+            f"<th style='{th_style}'>إجمالي المستحق</th>"
+            f"<th style='{th_style}; background:#166534;'>إجمالي المسدد كلياً</th>"
+            f"<th style='{th_style}; background:#92400e;'>إجمالي المسدد جزئياً</th>"
+            f"<th style='{th_style}; background:#991b1b;'>إجمالي المتبقي</th>"
             "</tr>"
         )
 
         table_html = (
-            "<div style='overflow-x:auto;margin-bottom:20px;'>"
-            "<table style='width:100%;border-collapse:collapse;background:#fff;"
-            "border-radius:14px;overflow:hidden;box-shadow:0 4px 20px rgba(30,58,138,0.10);'>"
-            "<thead>"
-            "<tr style='background:#1e3a8a;'>"
-            "<th style='padding:14px;text-align:right;color:#fff;font-size:14px;'>اسم الفرع</th>"
-            "<th style='padding:14px;text-align:center;color:#fff;font-size:14px;'>عدد الحالات</th>"
-            "<th style='padding:14px;text-align:center;color:#fff;font-size:14px;'>إجمالي المستحق</th>"
-            "<th style='padding:14px;text-align:center;color:#fff;font-size:14px;'>إجمالي المدفوع</th>"
-            "<th style='padding:14px;text-align:center;color:#fff;font-size:14px;'>إجمالي المتبقي</th>"
-            "</tr>"
-            "</thead>"
-            "<tbody>" + rows_html + "</tbody>"
-            "</table></div>"
+            f"<div style='overflow-x:auto;margin-bottom:20px;'>"
+            f"<table style='width:100%;border-collapse:collapse;background:#fff;"
+            f"border-radius:14px;overflow:hidden;box-shadow:0 4px 20px rgba(30,58,138,0.12);font-size:13px;'>"
+            f"<thead>{header}</thead><tbody>{body}</tbody></table></div>"
         )
         st.markdown(table_html, unsafe_allow_html=True)
+
+    # ── عرض الملخص ──
+    if len(unique_branches) == 1:
+        br_name = unique_branches[0]
+        st.markdown(
+            f"<div style='background:#eff6ff;border-right:5px solid #2563eb;border-radius:10px;"
+            f"padding:10px 16px;margin-bottom:10px;font-size:15px;font-weight:700;color:#1e3a8a;'>"
+            f"📍 ملخص فرع: {br_name}</div>",
+            unsafe_allow_html=True
+        )
+        build_branch_table(df_acc)
+    else:
+        st.markdown('<div class="sec-title">🏢 ملخص إجمالي الفروع</div>', unsafe_allow_html=True)
+        build_branch_table(df_acc)
 
     st.markdown('<div class="sec-title">📋 جدول الأقساط المستحقة</div>',unsafe_allow_html=True)
     col_map=[
@@ -854,11 +860,12 @@ def outstanding_page():
             sm['إجمالي فوري']=df_acc.groupby('حالة الدفع')[fawry_col].sum().values if fawry_col else 0
             sm['إجمالي Opay']=df_acc.groupby('حالة الدفع')[opay_col].sum().values  if opay_col  else 0
             sm['إجمالي المدفوع']=sm['إجمالي فوري']+sm['إجمالي Opay']
-            # المتبقي من _remaining (يعكس المسدد جزئي بشكل صحيح)
-            rem_by_status = df_acc.groupby('حالة الدفع')['_remaining'].sum().reset_index()
-            rem_by_status.columns = ['حالة الدفع', 'المتبقي']
-            sm = sm.merge(rem_by_status, on='حالة الدفع', how='left')
-            sm['المتبقي'] = sm['المتبقي'].fillna(0)
+            # المتبقي = المستحق - المدفوع الفعلي (للمسدد جزئي = القسط - المدفوع منه)
+            paid_by_status = df_acc.groupby('حالة الدفع')['_paid'].sum().reset_index()
+            paid_by_status.columns = ['حالة الدفع', '_total_paid']
+            sm = sm.merge(paid_by_status, on='حالة الدفع', how='left')
+            sm['المتبقي'] = sm[inst_col] - sm['_total_paid'].fillna(0)
+            sm = sm.drop(columns=['_total_paid'])
             sm.columns=['حالة الدفع','إجمالي المستحق','عدد الأقساط','إجمالي فوري','إجمالي Opay','إجمالي المدفوع','المتبقي']
             for c in ['إجمالي المستحق','إجمالي فوري','إجمالي Opay','إجمالي المدفوع','المتبقي']:
                 sm[c]=sm[c].apply(lambda x:f"{x:,.2f}")
@@ -883,11 +890,8 @@ def outstanding_page():
                     os_=os_.merge(ops,on='اسم المسؤول',how='left'); os_['إجمالي Opay']=os_['إجمالي Opay'].fillna(0)
                 else: os_['إجمالي Opay']=0
                 os_['إجمالي المدفوع']=os_['إجمالي فوري']+os_['إجمالي Opay']
-                # المتبقي الحقيقي من _remaining
-                rem_off = df_acc.groupby(ofc)['_remaining'].sum().reset_index()
-                rem_off.columns = ['اسم المسؤول', 'المتبقي']
-                os_ = os_.merge(rem_off, on='اسم المسؤول', how='left')
-                os_['المتبقي'] = os_['المتبقي'].fillna(0)
+                # المتبقي = المستحق - المدفوع الفعلي (المسدد جزئي يُخصم ما اتسدد منه فقط)
+                os_['المتبقي'] = os_['إجمالي المستحق'] - os_['إجمالي المدفوع']
                 os_['متوسط القسط']=os_['إجمالي المستحق']/os_['عدد الأقساط']
                 for c in ['إجمالي المستحق','إجمالي فوري','إجمالي Opay','إجمالي المدفوع','المتبقي','متوسط القسط']:
                     os_[c]=os_[c].apply(lambda x:f"{x:,.2f}")
