@@ -88,6 +88,22 @@ html, body, .main, .block-container { direction: rtl; }
 .kpi-val { font-size:22px; font-weight:800; color:#1e3a8a; }
 .kpi-lbl { font-size:12px; color:#64748b; margin-top:4px; }
 
+/* ======= كروت الأكواد ======= */
+.code-card {
+    background:#fff;
+    border-radius:14px;
+    padding:16px 18px;
+    box-shadow:0 2px 12px rgba(30,58,138,0.09);
+    border-top:4px solid #2563eb;
+    text-align:center;
+    margin-bottom:14px;
+}
+.code-card-name  { font-size:13px; font-weight:700; color:#2563eb; margin-bottom:6px; }
+.code-card-count { font-size:22px; font-weight:800; color:#1e3a8a; }
+.code-card-unit  { font-size:11px; color:#64748b; margin-top:2px; }
+.code-card-amt   { font-size:15px; font-weight:700; color:#059669; margin-top:8px; }
+.code-card-amt-l { font-size:11px; color:#64748b; }
+
 /* ======= فلاتر ======= */
 .filter-bar {
     background:#f1f5f9;
@@ -452,13 +468,52 @@ def reports_page():
     if final_df.empty:
         st.warning("⚠️ لا توجد بيانات تطابق معايير البحث"); return
 
-    counts=final_df['كود الخدمة'].value_counts()
-    codes_html=" &nbsp;|&nbsp; ".join([f"<b>{k}</b>: {v}" for k,v in counts.items()])
+    # ── إحصائيات لكل كود ──
+    code_stats = (
+        final_df.groupby('كود الخدمة')
+        .agg(عدد=('المبلغ', 'count'), مبلغ=('المبلغ', 'sum'))
+        .reset_index()
+        .sort_values('عدد', ascending=False)
+    )
 
-    k1,k2,k3=st.columns(3)
-    with k1: st.markdown(f'<div class="kpi-card"><div class="kpi-lbl">💰 إجمالي المبالغ</div><div class="kpi-val">{final_df["المبلغ"].sum():,.0f} ج.م</div></div>',unsafe_allow_html=True)
-    with k2: st.markdown(f'<div class="kpi-card"><div class="kpi-lbl">📊 عدد العمليات</div><div class="kpi-val">{len(final_df):,} حركة</div></div>',unsafe_allow_html=True)
-    with k3: st.markdown(f'<div class="kpi-card"><div class="kpi-lbl">📋 الأكواد</div><div style="font-size:13px;color:#1e3a8a;margin-top:6px">{codes_html}</div></div>',unsafe_allow_html=True)
+    # ── KPIs الرئيسية ──
+    k1, k2 = st.columns(2)
+    with k1:
+        st.markdown(
+            f'<div class="kpi-card">'
+            f'<div class="kpi-lbl">💰 إجمالي المبالغ</div>'
+            f'<div class="kpi-val">{final_df["المبلغ"].sum():,.0f} ج.م</div>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+    with k2:
+        st.markdown(
+            f'<div class="kpi-card">'
+            f'<div class="kpi-lbl">📊 عدد العمليات</div>'
+            f'<div class="kpi-val">{len(final_df):,} حركة</div>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+
+    # ── كروت تفاصيل الأكواد ──
+    st.markdown('<div class="sec-title">📋 تفاصيل الأكواد</div>', unsafe_allow_html=True)
+    num_codes = len(code_stats)
+    # على الموبايل max عمودين، على التابلت 3، على الكمبيوتر max 4
+    cols_count = min(num_codes, 4) if num_codes > 0 else 1
+    code_cols = st.columns(cols_count)
+    for i, row in enumerate(code_stats.itertuples(index=False)):
+        col_idx = i % cols_count
+        with code_cols[col_idx]:
+            st.markdown(
+                f'<div class="code-card">'
+                f'<div class="code-card-name">🏷️ {row[0]}</div>'
+                f'<div class="code-card-count">{int(row[1]):,}</div>'
+                f'<div class="code-card-unit">عملية</div>'
+                f'<div class="code-card-amt">{row[2]:,.0f} ج.م</div>'
+                f'<div class="code-card-amt-l">إجمالي المبلغ</div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
 
     with st.expander("📅 الملخص اليومي", expanded=False):
         daily=final_df.groupby(final_df['تاريخ الدفع'].dt.date).agg(
@@ -602,7 +657,6 @@ def outstanding_page():
 
     df_acc['_paid']      = fawry_series + opay_series
     df_acc['_inst']      = inst_series
-    # المتبقي لكل صف = القسط - المدفوع الفعلي (مش كامل القسط لو في سداد جزئي)
     df_acc['_remaining'] = (df_acc['_inst'] - df_acc['_paid']).clip(lower=0)
 
     # ── تحديد الحالة ──
@@ -620,18 +674,15 @@ def outstanding_page():
     df_acc = df_acc.sort_values('_sk').drop('_sk', axis=1)
 
     # ── الإحصائيات الكلية ──
-    ti = df_acc['_inst'].sum()               # إجمالي المستحق
-    tp = df_acc['_paid'].sum()               # إجمالي المدفوع فعلاً (يشمل الجزئي)
-    tr = ti - tp                             # المتبقي = المستحق - المدفوع الفعلي
+    ti = df_acc['_inst'].sum()
+    tp = df_acc['_paid'].sum()
+    tr = ti - tp
 
-    # إحصائيات المسدد جزئي
     df_partial   = df_acc[df_acc['حالة الدفع'] == "⚠️ مسدد جزئي"]
     partial_cnt  = len(df_partial)
     partial_paid = df_partial['_paid'].sum()
-    # المتبقي من الجزئي = قيمة الأقساط - ما اتسدد منها فعلاً
     partial_rem  = df_partial['_inst'].sum() - df_partial['_paid'].sum()
 
-    # إحصائيات غير المدفوع
     df_unpaid  = df_acc[df_acc['حالة الدفع'] == "❌ غير مدفوع"]
     unpaid_cnt = len(df_unpaid)
 
@@ -699,9 +750,6 @@ def outstanding_page():
     unique_branches = df_acc[branch_col].dropna().unique().tolist()
 
     def build_branch_table(df_data, title_prefix=""):
-        """بناء جدول ملخص الفروع التفصيلي"""
-
-        # ── تجميع البيانات لكل فرع ──
         rows = []
         for br in sorted(df_data[branch_col].dropna().unique()):
             df_br = df_data[df_data[branch_col] == br]
@@ -710,8 +758,8 @@ def outstanding_page():
             df_unp     = df_br[df_br['حالة الدفع'] == "❌ غير مدفوع"]
 
             inst_total = df_br['_inst'].sum()
-            paid_full  = df_full['_paid'].sum()   # ما اتسدد كاملاً
-            paid_part  = df_part['_paid'].sum()   # ما اتسدد جزئياً
+            paid_full  = df_full['_paid'].sum()
+            paid_part  = df_part['_paid'].sum()
             remaining  = inst_total - (paid_full + paid_part)
 
             rows.append({
@@ -731,7 +779,6 @@ def outstanding_page():
 
         df_tbl = pd.DataFrame(rows).sort_values('إجمالي المستحق', ascending=False)
 
-        # ── صف الإجمالي ──
         tot = {
             'اسم الفرع':            'الإجمالي الكلي',
             'عدد الكل':             df_tbl['عدد الكل'].sum(),
@@ -744,7 +791,6 @@ def outstanding_page():
             'إجمالي المتبقي':        df_tbl['إجمالي المتبقي'].sum(),
         }
 
-        # ── رسم الجدول HTML ──
         def td(val, color='#1e293b', bold=False, bg=''):
             fw  = 'font-weight:700;' if bold else 'font-weight:500;'
             bgc = f'background:{bg};' if bg else ''
@@ -773,7 +819,6 @@ def outstanding_page():
                 + "</tr>"
             )
 
-        # صف الإجمالي
         body += (
             "<tr style='background:#0f172a;'>"
             f"<td style='padding:12px 14px;text-align:right;color:#fff;font-weight:800;'>الإجمالي الكلي</td>"
@@ -812,7 +857,6 @@ def outstanding_page():
         )
         st.markdown(table_html, unsafe_allow_html=True)
 
-    # ── عرض الملخص ──
     if len(unique_branches) == 1:
         br_name = unique_branches[0]
         st.markdown(
@@ -860,7 +904,6 @@ def outstanding_page():
             sm['إجمالي فوري']=df_acc.groupby('حالة الدفع')[fawry_col].sum().values if fawry_col else 0
             sm['إجمالي Opay']=df_acc.groupby('حالة الدفع')[opay_col].sum().values  if opay_col  else 0
             sm['إجمالي المدفوع']=sm['إجمالي فوري']+sm['إجمالي Opay']
-            # المتبقي = المستحق - المدفوع الفعلي (للمسدد جزئي = القسط - المدفوع منه)
             paid_by_status = df_acc.groupby('حالة الدفع')['_paid'].sum().reset_index()
             paid_by_status.columns = ['حالة الدفع', '_total_paid']
             sm = sm.merge(paid_by_status, on='حالة الدفع', how='left')
@@ -890,7 +933,6 @@ def outstanding_page():
                     os_=os_.merge(ops,on='اسم المسؤول',how='left'); os_['إجمالي Opay']=os_['إجمالي Opay'].fillna(0)
                 else: os_['إجمالي Opay']=0
                 os_['إجمالي المدفوع']=os_['إجمالي فوري']+os_['إجمالي Opay']
-                # المتبقي = المستحق - المدفوع الفعلي (المسدد جزئي يُخصم ما اتسدد منه فقط)
                 os_['المتبقي'] = os_['إجمالي المستحق'] - os_['إجمالي المدفوع']
                 os_['متوسط القسط']=os_['إجمالي المستحق']/os_['عدد الأقساط']
                 for c in ['إجمالي المستحق','إجمالي فوري','إجمالي Opay','إجمالي المدفوع','المتبقي','متوسط القسط']:
@@ -912,7 +954,6 @@ def outstanding_page():
 
 def main_app():
     if 'user' not in st.session_state:
-        # شاشة الدخول
         st.markdown("""
         <div style="background:linear-gradient(135deg,#0f172a 0%,#1e3a8a 100%);
                     border-radius:20px;padding:50px 20px;text-align:center;margin-bottom:30px;">
