@@ -661,6 +661,8 @@ def reports_page():
             day_total_count = len(df_day)
             day_total_amt   = df_day['المبلغ'].sum()
             first_code = True
+            codes_in_day = [c for c in all_codes if not df_day[df_day['كود الخدمة'] == c].empty]
+            rowspan_val  = len(codes_in_day)
             for code in all_codes:
                 df_code = df_day[df_day['كود الخدمة'] == code]
                 if df_code.empty:
@@ -670,7 +672,7 @@ def reports_page():
                 amt = df_code['المبلغ'].sum()
                 # عمود التاريخ يظهر بس في أول كود في اليوم
                 date_cell = (
-                    f"<td rowspan='{sum(1 for c in all_codes if not df_day[df_day[\"كود الخدمة\"]==c].empty)}' "
+                    f"<td rowspan='{rowspan_val}' "
                     f"style='padding:10px 14px;text-align:center;border-bottom:2px solid #cbd5e1;"
                     f"border-left:1px solid #e2e8f0;font-weight:700;color:#1e3a8a;vertical-align:middle;"
                     f"background:#f8fafc;font-size:13px;white-space:nowrap;'>{d}</td>"
