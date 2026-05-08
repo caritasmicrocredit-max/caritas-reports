@@ -343,7 +343,19 @@ def generate_reports_excel_daily(df_display, original_df):
     ws_sum.row_dimensions[2].height = 24
 
     temp = original_df.copy()
-    temp['_date'] = temp['تاريخ الدفع'].dt.date
+    # لو الأعمدة لسه إنجليزي نحولها عربي
+    temp = temp.rename(columns={
+        'client_code':      'كود العميل',
+        'client_name':      'اسم العميل',
+        'branch_name':      'الفرع',
+        'CODE':             'مكان الدفع',
+        'transaction_code': 'كود التحويلة',
+    })
+    # تحويل تاريخ الدفع لو لسه datetime
+    if pd.api.types.is_datetime64_any_dtype(temp.get('تاريخ الدفع', pd.Series())):
+        temp['_date'] = temp['تاريخ الدفع'].dt.date
+    else:
+        temp['_date'] = pd.to_datetime(temp['تاريخ الدفع'], errors='coerce').dt.date
     dates = sorted(temp['_date'].dropna().unique())
 
     cur_row = 3
@@ -643,18 +655,12 @@ def generate_reports_excel_daily(df_display, original_df):
 
     for d in dates:
         ddf = temp[temp['_date'] == d].copy()
-        dd  = ddf.rename(columns={
-            'client_code':      'كود العميل',
-            'client_name':      'اسم العميل',
-            'branch_name':      'الفرع',
-            'CODE':             'مكان الدفع',
-            'transaction_code': 'كود التحويلة',
-        })
+        dd  = ddf.copy()
         if 'تاريخ الدفع' in dd.columns:
-            dd['تاريخ الدفع'] = dd['تاريخ الدفع'].dt.strftime('%Y-%m-%d')
+            if pd.api.types.is_datetime64_any_dtype(dd['تاريخ الدفع']):
+                dd['تاريخ الدفع'] = dd['تاريخ الدفع'].dt.strftime('%Y-%m-%d')
         drop = [c for c in dd.columns if c.startswith('_') or c == 'id']
         dd   = dd.drop(columns=drop, errors='ignore')
-        # ترتيب الصفوف حسب الكود عشان الألوان تكون متجمعة
         if 'كود الخدمة' in dd.columns:
             dd = dd.sort_values('كود الخدمة').reset_index(drop=True)
         ws_day = wb.create_sheet(str(d)[:31])
@@ -1070,21 +1076,21 @@ def reports_page():
     if 'تاريخ الدفع' in display_df.columns:
         display_df['تاريخ الدفع'] = display_df['تاريخ الدفع'].dt.strftime('%Y-%m-%d')
 
-    # ── عرض الأعمدة المهمة فقط بعرض محدد ──
+    # ── الأعمدة المهمة فقط للعرض ──
     show_cols = ['الفرع', 'كود العميل', 'اسم العميل', 'تاريخ الدفع',
                  'المبلغ', 'كود الخدمة', 'مكان الدفع', 'كود التحويلة']
     show_cols = [c for c in show_cols if c in display_df.columns]
     view_df   = display_df[show_cols]
 
     col_config = {
-        'الفرع':         st.column_config.TextColumn('الفرع',         width=120),
-        'كود العميل':    st.column_config.TextColumn('كود العميل',    width=100),
-        'اسم العميل':    st.column_config.TextColumn('اسم العميل',    width=150),
-        'تاريخ الدفع':   st.column_config.TextColumn('تاريخ الدفع',   width=100),
-        'المبلغ':        st.column_config.NumberColumn('المبلغ',       width=90,  format='%.2f'),
-        'كود الخدمة':    st.column_config.TextColumn('كود الخدمة',    width=90),
-        'مكان الدفع':    st.column_config.TextColumn('مكان الدفع',    width=100),
-        'كود التحويلة':  st.column_config.TextColumn('كود التحويلة',  width=130),
+        'الفرع':        st.column_config.TextColumn('الفرع',        width='small'),
+        'كود العميل':   st.column_config.TextColumn('كود العميل',   width='small'),
+        'اسم العميل':   st.column_config.TextColumn('اسم العميل',   width='medium'),
+        'تاريخ الدفع':  st.column_config.TextColumn('تاريخ الدفع',  width='small'),
+        'المبلغ':       st.column_config.NumberColumn('المبلغ',      width='small', format='%.2f'),
+        'كود الخدمة':   st.column_config.TextColumn('كود الخدمة',   width='small'),
+        'مكان الدفع':   st.column_config.TextColumn('مكان الدفع',   width='small'),
+        'كود التحويلة': st.column_config.TextColumn('كود التحويلة', width='medium'),
     }
 
     st.dataframe(view_df, use_container_width=True, hide_index=True,
@@ -1104,7 +1110,7 @@ def reports_page():
     with dl3:
         if split_mode=="تقسيم يوم يوم (شيت لكل يوم)":
             if selected_day=="كل الأيام":
-                xls=generate_reports_excel_daily(display_df,final_df)
+                xls=generate_reports_excel_daily(display_df, final_df)
                 fname=f"تقرير_كل_الأيام_{datetime.now().date()}.xlsx"
             else:
                 sd=pd.to_datetime(selected_day).date()
