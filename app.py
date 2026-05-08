@@ -733,20 +733,29 @@ def reports_page():
 
     # ── فلاتر ──
     st.markdown('<div class="filter-bar"><div class="filter-bar-title">🔍 أدوات البحث والتصفية</div>', unsafe_allow_html=True)
-    fc1,fc2,fc3,fc4 = st.columns(4)
+
+    # صف أول: التواريخ + الفرع + الكود
+    fc1, fc2, fc3, fc4 = st.columns(4)
     with fc1: start_d = st.date_input("📅 من تاريخ", v_dates.min().date(), key="r_from")
     with fc2: end_d   = st.date_input("📅 إلى تاريخ", v_dates.max().date(), key="r_to")
     with fc3:
-        codes=["الكل"]+sorted(df_acc['كود الخدمة'].unique().tolist())
-        sel_code=st.selectbox("🏷️ كود الخدمة", codes, key="r_code")
-    with fc4: s_name=st.text_input("🔎 بحث بالاسم أو الكود", key="r_search")
+        all_branches_r = ["الكل"] + sorted(df_acc['branch_name'].dropna().unique().tolist())
+        sel_branch = st.selectbox("🏢 الفرع", all_branches_r, key="r_branch")
+    with fc4:
+        codes = ["الكل"] + sorted(df_acc['كود الخدمة'].dropna().unique().tolist())
+        sel_code = st.selectbox("🏷️ كود الخدمة", codes, key="r_code")
+
+    # صف ثاني: بحث بالاسم
+    fc5, fc6 = st.columns([3, 1])
+    with fc5: s_name = st.text_input("🔎 بحث بالاسم أو الكود", key="r_search")
     st.markdown('</div>', unsafe_allow_html=True)
 
     mask = (df_acc['تاريخ الدفع'].dt.date >= start_d) & (df_acc['تاريخ الدفع'].dt.date <= end_d)
-    if sel_code != "الكل": mask &= (df_acc['كود الخدمة'] == sel_code)
+    if sel_branch != "الكل": mask &= (df_acc['branch_name'] == sel_branch)
+    if sel_code   != "الكل": mask &= (df_acc['كود الخدمة'] == sel_code)
     if s_name:
-        mask &= (df_acc['client_name'].astype(str).str.contains(s_name,na=False,case=False) |
-                 df_acc['client_code'].astype(str).str.contains(s_name,na=False,case=False))
+        mask &= (df_acc['client_name'].astype(str).str.contains(s_name, na=False, case=False) |
+                 df_acc['client_code'].astype(str).str.contains(s_name, na=False, case=False))
 
     final_df = df_acc.loc[mask]
     if final_df.empty:
