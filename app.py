@@ -1070,14 +1070,25 @@ def reports_page():
     if 'تاريخ الدفع' in display_df.columns:
         display_df['تاريخ الدفع'] = display_df['تاريخ الدفع'].dt.strftime('%Y-%m-%d')
 
-    # ترتيب الأعمدة — مكان الدفع وكود التحويلة يجوا بعد المبلغ مباشرة
-    priority_cols = ['الفرع', 'كود العميل', 'اسم العميل', 'تاريخ الدفع',
-                     'المبلغ', 'كود الخدمة', 'مكان الدفع', 'كود التحويلة']
-    ordered = [c for c in priority_cols if c in display_df.columns]
-    rest    = [c for c in display_df.columns if c not in ordered]
-    display_df = display_df[ordered + rest]
+    # ── عرض الأعمدة المهمة فقط بعرض محدد ──
+    show_cols = ['الفرع', 'كود العميل', 'اسم العميل', 'تاريخ الدفع',
+                 'المبلغ', 'كود الخدمة', 'مكان الدفع', 'كود التحويلة']
+    show_cols = [c for c in show_cols if c in display_df.columns]
+    view_df   = display_df[show_cols]
 
-    st.dataframe(display_df, use_container_width=True, hide_index=True, height=420)
+    col_config = {
+        'الفرع':         st.column_config.TextColumn('الفرع',         width=120),
+        'كود العميل':    st.column_config.TextColumn('كود العميل',    width=100),
+        'اسم العميل':    st.column_config.TextColumn('اسم العميل',    width=150),
+        'تاريخ الدفع':   st.column_config.TextColumn('تاريخ الدفع',   width=100),
+        'المبلغ':        st.column_config.NumberColumn('المبلغ',       width=90,  format='%.2f'),
+        'كود الخدمة':    st.column_config.TextColumn('كود الخدمة',    width=90),
+        'مكان الدفع':    st.column_config.TextColumn('مكان الدفع',    width=100),
+        'كود التحويلة':  st.column_config.TextColumn('كود التحويلة',  width=130),
+    }
+
+    st.dataframe(view_df, use_container_width=True, hide_index=True,
+                 height=420, column_config=col_config)
 
     # ── تحميل ──
     st.markdown('<div class="sec-title">📥 تحميل التقرير</div>', unsafe_allow_html=True)
