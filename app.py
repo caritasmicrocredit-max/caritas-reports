@@ -410,7 +410,133 @@ def generate_reports_excel_daily(df_display, original_df):
     ws_sum.freeze_panes = "A3"
 
     # ─────────────────────────────────────────────
-    # شيتات الأيام التفصيلية — كل صف ملون بلون كوده
+    # شيت: ملخص الفروع — كل فرع × كل يوم × كل كود
+    # ─────────────────────────────────────────────
+    ws_br = wb.create_sheet("ملخص الفروع")
+    ws_br.sheet_view.rightToLeft = True
+    br_cols = ["الفرع", "التاريخ", "كود الخدمة", "عدد الحركات", "إجمالي المبلغ (ج.م)"]
+    nbr = len(br_cols)
+
+    ws_br.merge_cells(f'A1:{get_column_letter(nbr)}1')
+    ws_br['A1'].value = "ملخص الفروع اليومي المفصّل"
+    ws_br['A1'].font  = Font(bold=True, size=14, color=DARK, name="Arial")
+    ws_br['A1'].fill  = PatternFill("solid", fgColor=LIGHT)
+    ws_br['A1'].alignment = Alignment(horizontal='center', vertical='center')
+    ws_br.row_dimensions[1].height = 32
+
+    for ci, h in enumerate(br_cols, 1):
+        c = ws_br.cell(row=2, column=ci, value=h)
+        c.font  = Font(bold=True, color=WHT, name="Arial", size=11)
+        c.fill  = PatternFill("solid", fgColor=DARK)
+        c.alignment = Alignment(horizontal='center', vertical='center')
+        c.border = thin_border()
+    ws_br.row_dimensions[2].height = 24
+
+    all_branches = sorted(temp['branch_name'].dropna().unique().tolist()) \
+        if 'branch_name' in temp.columns else []
+
+    br_row = 3
+    for br in all_branches:
+        df_br = temp[temp['branch_name'] == br]
+        if df_br.empty:
+            continue
+        br_section_start = br_row
+
+        for d in dates:
+            df_day_br = df_br[df_br['_date'] == d]
+            if df_day_br.empty:
+                continue
+            day_cnt = len(df_day_br)
+            day_amt = float(df_day_br['المبلغ'].sum())
+            day_section_start = br_row
+
+            for code in all_codes:
+                df_dc = df_day_br[df_day_br['كود الخدمة'] == code]
+                if df_dc.empty:
+                    continue
+                bg_hex, fg_hex = code_color_map[code]
+                cnt = len(df_dc)
+                amt = float(df_dc['المبلغ'].sum())
+
+                for ci in range(1, nbr + 1):
+                    c = ws_br.cell(row=br_row, column=ci)
+                    c.fill      = PatternFill("solid", fgColor=bg_hex)
+                    c.font      = Font(bold=True, color=fg_hex, name="Arial", size=10)
+                    c.alignment = Alignment(horizontal='center', vertical='center')
+                    c.border    = thin_border()
+                ws_br.cell(row=br_row, column=1).value = br
+                ws_br.cell(row=br_row, column=2).value = str(d)
+                ws_br.cell(row=br_row, column=3).value = code
+                ws_br.cell(row=br_row, column=4).value = cnt
+                ws_br.cell(row=br_row, column=5).value = amt
+                ws_br.cell(row=br_row, column=5).number_format = '#,##0.00'
+                br_row += 1
+
+            # صف إجمالي اليوم داخل الفرع
+            day_end = br_row - 1
+            for ci in range(1, nbr + 1):
+                c = ws_br.cell(row=br_row, column=ci)
+                c.fill      = PatternFill("solid", fgColor="0F172A")
+                c.font      = Font(bold=True, color="FFFFFF", name="Arial", size=10)
+                c.alignment = Alignment(horizontal='center', vertical='center')
+                c.border    = thin_border()
+            ws_br.cell(row=br_row, column=1).value = br
+            ws_br.cell(row=br_row, column=2).value = f"✦ إجمالي {d}"
+            ws_br.cell(row=br_row, column=3).value = "الكل"
+            ws_br.cell(row=br_row, column=4).value = f"=SUM(D{day_section_start}:D{day_end})"
+            ws_br.cell(row=br_row, column=5).value = f"=SUM(E{day_section_start}:E{day_end})"
+            ws_br.cell(row=br_row, column=5).number_format = '#,##0.00'
+            ws_br.cell(row=br_row, column=4).font = Font(bold=True, color="BFDBFE", name="Arial", size=10)
+            ws_br.row_dimensions[br_row].height = 22
+            br_row += 1
+
+        # صف إجمالي الفرع كله
+        br_section_end = br_row - 1
+        for ci in range(1, nbr + 1):
+            c = ws_br.cell(row=br_row, column=ci)
+            c.fill      = PatternFill("solid", fgColor=TBG)
+            c.font      = Font(bold=True, color=DARK, name="Arial", size=11)
+            c.alignment = Alignment(horizontal='center', vertical='center')
+            c.border    = thin_border()
+        ws_br.cell(row=br_row, column=1).value = f"✦ إجمالي {br}"
+        ws_br.cell(row=br_row, column=2).value = "—"
+        ws_br.cell(row=br_row, column=3).value = "الكل"
+        ws_br.cell(row=br_row, column=4).value = (
+            f'=SUMIF(C{br_section_start}:C{br_section_end},"الكل",'
+            f'D{br_section_start}:D{br_section_end})'
+        )
+        ws_br.cell(row=br_row, column=5).value = (
+            f'=SUMIF(C{br_section_start}:C{br_section_end},"الكل",'
+            f'E{br_section_start}:E{br_section_end})'
+        )
+        ws_br.cell(row=br_row, column=5).number_format = '#,##0.00'
+        ws_br.row_dimensions[br_row].height = 26
+        br_row += 1
+
+    # صف الإجمالي الكلي لكل الفروع
+    for ci in range(1, nbr + 1):
+        c = ws_br.cell(row=br_row, column=ci)
+        c.fill      = PatternFill("solid", fgColor="1E3A8A")
+        c.font      = Font(bold=True, color="FFFFFF", name="Arial", size=12)
+        c.alignment = Alignment(horizontal='center', vertical='center')
+        c.border    = thin_border()
+    ws_br.cell(row=br_row, column=1).value = "✦ الإجمالي الكلي"
+    ws_br.cell(row=br_row, column=2).value = "—"
+    ws_br.cell(row=br_row, column=3).value = "—"
+    ws_br.cell(row=br_row, column=4).value = (
+        f'=SUMIF(C3:C{br_row-1},"الكل",D3:D{br_row-1})'
+    )
+    ws_br.cell(row=br_row, column=5).value = (
+        f'=SUMIF(C3:C{br_row-1},"الكل",E3:E{br_row-1})'
+    )
+    ws_br.cell(row=br_row, column=5).number_format = '#,##0.00'
+    ws_br.row_dimensions[br_row].height = 30
+
+    for ci, w in enumerate([22, 16, 16, 16, 22], 1):
+        ws_br.column_dimensions[get_column_letter(ci)].width = w
+    ws_br.freeze_panes = "A3"
+
+    # ─────────────────────────────────────────────
     # ─────────────────────────────────────────────
     def style_sheet_colored(ws, df_part, title_text):
         ws.sheet_view.rightToLeft = True
@@ -732,6 +858,145 @@ def reports_page():
             f"<th style='{th}'>عدد الحركات</th>"
             f"<th style='{th}'>إجمالي المبلغ (ج.م)</th>"
             f"</tr></thead><tbody>{rows_html}</tbody></table></div>",
+            unsafe_allow_html=True
+        )
+
+    with st.expander("🏢 ملخص الفروع اليومي", expanded=False):
+        # نفس خريطة الألوان المستخدمة في الملخص اليومي
+        _CODE_COLORS_HTML = [
+            "#dbeafe","#dcfce7","#fef9c3","#fce7f3",
+            "#ede9fe","#ffedd5","#cffafe","#fee2e2",
+        ]
+        _CODE_TEXT_HTML = [
+            "#1e40af","#166534","#854d0e","#9d174d",
+            "#6b21a8","#9a3412","#0e7490","#991b1b",
+        ]
+        _all_codes = sorted(final_df['كود الخدمة'].dropna().unique().tolist())
+        _code_color_map = {
+            c: (_CODE_COLORS_HTML[i % len(_CODE_COLORS_HTML)],
+                _CODE_TEXT_HTML[i % len(_CODE_TEXT_HTML)])
+            for i, c in enumerate(_all_codes)
+        }
+
+        _temp = final_df.copy()
+        _temp['_date'] = _temp['تاريخ الدفع'].dt.date
+        _all_branches  = sorted(_temp['branch_name'].dropna().unique().tolist())
+        _dates_sorted  = sorted(_temp['_date'].dropna().unique())
+
+        # دليل الألوان
+        _legend = " &nbsp; ".join([
+            f"<span style='background:{_code_color_map[c][0]};color:{_code_color_map[c][1]};"
+            f"padding:3px 10px;border-radius:10px;font-size:12px;font-weight:700;'>{c}</span>"
+            for c in _all_codes
+        ])
+        st.markdown(
+            f"<div style='margin-bottom:10px;'>🎨 <strong>دليل الألوان:</strong> &nbsp; {_legend}</div>",
+            unsafe_allow_html=True
+        )
+
+        _th = "padding:11px 10px;text-align:center;color:#fff;font-size:12px;font-weight:700;white-space:nowrap;"
+        _th_r = "padding:11px 12px;text-align:right;color:#fff;font-size:12px;font-weight:700;white-space:nowrap;"
+
+        _rows = ""
+        for br in _all_branches:
+            df_br = _temp[_temp['branch_name'] == br]
+            if df_br.empty:
+                continue
+            br_total_cnt = len(df_br)
+            br_total_amt = df_br['المبلغ'].sum()
+
+            # حساب الـ rowspan = عدد (يوم × كود) موجودين + صف إجمالي كل يوم
+            br_day_code_rows = sum(
+                sum(1 for c in _all_codes if not df_br[(df_br['_date']==d) & (df_br['كود الخدمة']==c)].empty)
+                for d in _dates_sorted if not df_br[df_br['_date']==d].empty
+            )
+            br_day_total_rows = sum(1 for d in _dates_sorted if not df_br[df_br['_date']==d].empty)
+            br_rowspan = br_day_code_rows + br_day_total_rows
+
+            first_day_in_br = True
+            for d in _dates_sorted:
+                df_day_br = df_br[df_br['_date'] == d]
+                if df_day_br.empty:
+                    continue
+                day_cnt = len(df_day_br)
+                day_amt = df_day_br['المبلغ'].sum()
+                codes_here = [c for c in _all_codes if not df_day_br[df_day_br['كود الخدمة']==c].empty]
+                day_rowspan = len(codes_here) + 1  # +1 لصف إجمالي اليوم
+
+                first_code_in_day = True
+                for code in _all_codes:
+                    df_dc = df_day_br[df_day_br['كود الخدمة'] == code]
+                    if df_dc.empty:
+                        continue
+                    bg, fg = _code_color_map[code]
+                    cnt = len(df_dc)
+                    amt = df_dc['المبلغ'].sum()
+
+                    # خلية الفرع — تظهر بس مرة واحدة مع rowspan
+                    br_cell = (
+                        f"<td rowspan='{br_rowspan}' style='padding:10px 12px;text-align:center;"
+                        f"border-bottom:2px solid #1e3a8a;border-left:1px solid #e2e8f0;"
+                        f"font-weight:800;color:#fff;vertical-align:middle;"
+                        f"background:linear-gradient(180deg,#1e3a8a,#2563eb);"
+                        f"font-size:12px;writing-mode:vertical-rl;'>{br}</td>"
+                    ) if (first_day_in_br and first_code_in_day) else ""
+
+                    # خلية اليوم — تظهر مرة واحدة لكل يوم مع rowspan
+                    day_cell = (
+                        f"<td rowspan='{day_rowspan}' style='padding:9px 10px;text-align:center;"
+                        f"border-bottom:1px solid #cbd5e1;font-weight:700;color:#1e3a8a;"
+                        f"vertical-align:middle;background:#f8fafc;font-size:12px;white-space:nowrap;'>{d}</td>"
+                    ) if first_code_in_day else ""
+
+                    _rows += (
+                        f"<tr>"
+                        + br_cell + day_cell +
+                        f"<td style='padding:8px 10px;text-align:center;border-bottom:1px solid #e2e8f0;"
+                        f"background:{bg};color:{fg};font-weight:700;font-size:11px;'>{code}</td>"
+                        f"<td style='padding:8px 10px;text-align:center;border-bottom:1px solid #e2e8f0;"
+                        f"background:{bg};color:{fg};font-weight:700;'>{cnt:,}</td>"
+                        f"<td style='padding:8px 10px;text-align:center;border-bottom:1px solid #e2e8f0;"
+                        f"background:{bg};color:{fg};font-weight:700;'>{amt:,.2f}</td>"
+                        f"</tr>"
+                    )
+                    first_code_in_day = False
+                    first_day_in_br   = False
+
+                # صف إجمالي اليوم داخل الفرع
+                _rows += (
+                    f"<tr style='background:#0f172a;'>"
+                    f"<td style='padding:9px 10px;text-align:center;color:#93c5fd;font-weight:800;"
+                    f"border-bottom:1.5px solid #334155;font-size:11px;'>✦ {d}</td>"
+                    f"<td style='padding:9px 10px;text-align:center;color:#bfdbfe;font-weight:800;"
+                    f"border-bottom:1.5px solid #334155;font-size:11px;'>الكل</td>"
+                    f"<td style='padding:9px 10px;text-align:center;color:#fff;font-weight:800;"
+                    f"border-bottom:1.5px solid #334155;'>{day_cnt:,}</td>"
+                    f"<td style='padding:9px 10px;text-align:center;color:#fde68a;font-weight:800;"
+                    f"border-bottom:1.5px solid #334155;'>{day_amt:,.2f}</td>"
+                    f"</tr>"
+                )
+
+        # صف الإجمالي الكلي
+        _rows += (
+            f"<tr style='background:#1e3a8a;'>"
+            f"<td colspan='2' style='padding:12px;text-align:center;color:#fff;font-weight:800;font-size:13px;'>الإجمالي الكلي</td>"
+            f"<td style='padding:12px;text-align:center;color:#bfdbfe;font-weight:800;'>—</td>"
+            f"<td style='padding:12px;text-align:center;color:#fff;font-weight:800;'>{len(final_df):,}</td>"
+            f"<td style='padding:12px;text-align:center;color:#fde68a;font-weight:800;'>{final_df['المبلغ'].sum():,.2f}</td>"
+            f"</tr>"
+        )
+
+        st.markdown(
+            f"<div style='overflow-x:auto;'>"
+            f"<table style='width:100%;border-collapse:collapse;background:#fff;"
+            f"border-radius:14px;overflow:hidden;box-shadow:0 4px 20px rgba(30,58,138,0.12);font-size:12px;'>"
+            f"<thead><tr style='background:#1e3a8a;'>"
+            f"<th style='{_th_r}'>الفرع</th>"
+            f"<th style='{_th}'>التاريخ</th>"
+            f"<th style='{_th}'>كود الخدمة</th>"
+            f"<th style='{_th}'>عدد الحركات</th>"
+            f"<th style='{_th}'>إجمالي المبلغ (ج.م)</th>"
+            f"</tr></thead><tbody>{_rows}</tbody></table></div>",
             unsafe_allow_html=True
         )
 
