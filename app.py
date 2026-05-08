@@ -392,18 +392,43 @@ def generate_reports_excel_daily(df_display, original_df):
         ws_sum.row_dimensions[cur_row].height = 24
         cur_row += 1
 
-    # صف الإجمالي الكلي
+    # ── صف إجمالي لكل كود على حدة ──
+    data_end_sum = cur_row - 1
+    for code in all_codes:
+        bg_hex, fg_hex = code_color_map[code]
+        for ci in range(1, nsc + 1):
+            c = ws_sum.cell(row=cur_row, column=ci)
+            c.fill      = PatternFill("solid", fgColor=bg_hex)
+            c.font      = Font(bold=True, color=fg_hex, name="Arial", size=11)
+            c.alignment = Alignment(horizontal='center', vertical='center')
+            c.border    = thin_border()
+        ws_sum.cell(row=cur_row, column=1).value = "✦ إجمالي كود"
+        ws_sum.cell(row=cur_row, column=2).value = code
+        ws_sum.cell(row=cur_row, column=3).value = (
+            f'=SUMIF(B3:B{data_end_sum},"{code}",C3:C{data_end_sum})'
+        )
+        ws_sum.cell(row=cur_row, column=4).value = (
+            f'=SUMIF(B3:B{data_end_sum},"{code}",D3:D{data_end_sum})'
+        )
+        ws_sum.cell(row=cur_row, column=4).number_format = '#,##0.00'
+        ws_sum.row_dimensions[cur_row].height = 24
+        cur_row += 1
+
+    # ── صف الإجمالي الكلي لكل الأكواد ──
+    code_rows_start = cur_row - len(all_codes)
+    code_rows_end   = cur_row - 1
     for ci in range(1, nsc + 1):
         c = ws_sum.cell(row=cur_row, column=ci)
-        c.fill      = PatternFill("solid", fgColor=TBG)
-        c.font      = Font(bold=True, color=DARK, name="Arial", size=12)
+        c.fill      = PatternFill("solid", fgColor="1E3A8A")
+        c.font      = Font(bold=True, color="FFFFFF", name="Arial", size=12)
         c.alignment = Alignment(horizontal='center', vertical='center')
         c.border    = thin_border()
     ws_sum.cell(row=cur_row, column=1).value = "✦ الإجمالي الكلي"
-    ws_sum.cell(row=cur_row, column=3).value = f"=SUMIF(B3:B{cur_row-1},\"الكل\",C3:C{cur_row-1})"
-    ws_sum.cell(row=cur_row, column=4).value = f"=SUMIF(B3:B{cur_row-1},\"الكل\",D3:D{cur_row-1})"
+    ws_sum.cell(row=cur_row, column=2).value = "جميع الأكواد"
+    ws_sum.cell(row=cur_row, column=3).value = f"=SUM(C{code_rows_start}:C{code_rows_end})"
+    ws_sum.cell(row=cur_row, column=4).value = f"=SUM(D{code_rows_start}:D{code_rows_end})"
     ws_sum.cell(row=cur_row, column=4).number_format = '#,##0.00'
-    ws_sum.row_dimensions[cur_row].height = 28
+    ws_sum.row_dimensions[cur_row].height = 30
 
     for ci, w in enumerate([18, 18, 16, 22], 1):
         ws_sum.column_dimensions[get_column_letter(ci)].width = w
@@ -513,7 +538,32 @@ def generate_reports_excel_daily(df_display, original_df):
         ws_br.row_dimensions[br_row].height = 26
         br_row += 1
 
-    # صف الإجمالي الكلي لكل الفروع
+    # ── صف إجمالي لكل كود على حدة (ملخص الفروع) ──
+    data_end_br = br_row - 1
+    for code in all_codes:
+        bg_hex, fg_hex = code_color_map[code]
+        for ci in range(1, nbr + 1):
+            c = ws_br.cell(row=br_row, column=ci)
+            c.fill      = PatternFill("solid", fgColor=bg_hex)
+            c.font      = Font(bold=True, color=fg_hex, name="Arial", size=11)
+            c.alignment = Alignment(horizontal='center', vertical='center')
+            c.border    = thin_border()
+        ws_br.cell(row=br_row, column=1).value = "✦ إجمالي كود"
+        ws_br.cell(row=br_row, column=2).value = "—"
+        ws_br.cell(row=br_row, column=3).value = code
+        ws_br.cell(row=br_row, column=4).value = (
+            f'=SUMIF(C3:C{data_end_br},"{code}",D3:D{data_end_br})'
+        )
+        ws_br.cell(row=br_row, column=5).value = (
+            f'=SUMIF(C3:C{data_end_br},"{code}",E3:E{data_end_br})'
+        )
+        ws_br.cell(row=br_row, column=5).number_format = '#,##0.00'
+        ws_br.row_dimensions[br_row].height = 24
+        br_row += 1
+
+    # ── صف الإجمالي الكلي لكل الأكواد (ملخص الفروع) ──
+    code_rows_start_br = br_row - len(all_codes)
+    code_rows_end_br   = br_row - 1
     for ci in range(1, nbr + 1):
         c = ws_br.cell(row=br_row, column=ci)
         c.fill      = PatternFill("solid", fgColor="1E3A8A")
@@ -522,13 +572,9 @@ def generate_reports_excel_daily(df_display, original_df):
         c.border    = thin_border()
     ws_br.cell(row=br_row, column=1).value = "✦ الإجمالي الكلي"
     ws_br.cell(row=br_row, column=2).value = "—"
-    ws_br.cell(row=br_row, column=3).value = "—"
-    ws_br.cell(row=br_row, column=4).value = (
-        f'=SUMIF(C3:C{br_row-1},"الكل",D3:D{br_row-1})'
-    )
-    ws_br.cell(row=br_row, column=5).value = (
-        f'=SUMIF(C3:C{br_row-1},"الكل",E3:E{br_row-1})'
-    )
+    ws_br.cell(row=br_row, column=3).value = "جميع الأكواد"
+    ws_br.cell(row=br_row, column=4).value = f"=SUM(D{code_rows_start_br}:D{code_rows_end_br})"
+    ws_br.cell(row=br_row, column=5).value = f"=SUM(E{code_rows_start_br}:E{code_rows_end_br})"
     ws_br.cell(row=br_row, column=5).number_format = '#,##0.00'
     ws_br.row_dimensions[br_row].height = 30
 
