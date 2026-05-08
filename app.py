@@ -292,7 +292,7 @@ def generate_reports_excel_single(df_display, sheet_title="التقرير", repo
             c.alignment=Alignment(horizontal='center',vertical='center')
             c.font=Font(name="Arial",size=10); c.border=thin_border()
     ldr=2+len(df_display); write_total_row(ws,ldr+1,cols,ldr)
-    cw={"اسم العميل":28,"الفرع":20}
+    cw={"اسم العميل":28,"الفرع":20,"مكان الدفع":16,"كود التحويلة":20}
     for ci,col in enumerate(cols,1):
         ws.column_dimensions[get_column_letter(ci)].width=cw.get(col,18)
     ws.freeze_panes="A3"
@@ -637,16 +637,18 @@ def generate_reports_excel_daily(df_display, original_df):
         ldr = 2 + len(df_part)
         write_total_row(ws, ldr + 1, cols, ldr)
         ws.freeze_panes = "A3"
-        cw = {"اسم العميل": 28, "الفرع": 20, "كود الخدمة": 16}
+        cw = {"اسم العميل": 28, "الفرع": 20, "كود الخدمة": 16, "مكان الدفع": 16, "كود التحويلة": 20}
         for ci, col in enumerate(cols, 1):
             ws.column_dimensions[get_column_letter(ci)].width = cw.get(col, 17)
 
     for d in dates:
         ddf = temp[temp['_date'] == d].copy()
         dd  = ddf.rename(columns={
-            'client_code': 'كود العميل',
-            'client_name': 'اسم العميل',
-            'branch_name': 'الفرع'
+            'client_code':      'كود العميل',
+            'client_name':      'اسم العميل',
+            'branch_name':      'الفرع',
+            'CODE':             'مكان الدفع',
+            'transaction_code': 'كود التحويلة',
         })
         if 'تاريخ الدفع' in dd.columns:
             dd['تاريخ الدفع'] = dd['تاريخ الدفع'].dt.strftime('%Y-%m-%d')
@@ -1056,11 +1058,25 @@ def reports_page():
         )
 
     st.markdown('<div class="sec-title">📋 البيانات التفصيلية</div>', unsafe_allow_html=True)
-    display_df=final_df.copy().rename(columns={'client_code':'كود العميل','client_name':'اسم العميل','branch_name':'الفرع'})
-    drop_cols=[c for c in display_df.columns if c.startswith('_') or c=='id']
-    display_df=display_df.drop(columns=drop_cols,errors='ignore')
+    display_df = final_df.copy().rename(columns={
+        'client_code':       'كود العميل',
+        'client_name':       'اسم العميل',
+        'branch_name':       'الفرع',
+        'CODE':              'مكان الدفع',
+        'transaction_code':  'كود التحويلة',
+    })
+    drop_cols = [c for c in display_df.columns if c.startswith('_') or c == 'id']
+    display_df = display_df.drop(columns=drop_cols, errors='ignore')
     if 'تاريخ الدفع' in display_df.columns:
-        display_df['تاريخ الدفع']=display_df['تاريخ الدفع'].dt.strftime('%Y-%m-%d')
+        display_df['تاريخ الدفع'] = display_df['تاريخ الدفع'].dt.strftime('%Y-%m-%d')
+
+    # ترتيب الأعمدة — مكان الدفع وكود التحويلة يجوا بعد المبلغ مباشرة
+    priority_cols = ['الفرع', 'كود العميل', 'اسم العميل', 'تاريخ الدفع',
+                     'المبلغ', 'كود الخدمة', 'مكان الدفع', 'كود التحويلة']
+    ordered = [c for c in priority_cols if c in display_df.columns]
+    rest    = [c for c in display_df.columns if c not in ordered]
+    display_df = display_df[ordered + rest]
+
     st.dataframe(display_df, use_container_width=True, hide_index=True, height=420)
 
     # ── تحميل ──
