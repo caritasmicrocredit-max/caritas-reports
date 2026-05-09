@@ -292,7 +292,7 @@ def generate_reports_excel_single(df_display, sheet_title="التقرير", repo
             c.alignment=Alignment(horizontal='center',vertical='center')
             c.font=Font(name="Arial",size=10); c.border=thin_border()
     ldr=2+len(df_display); write_total_row(ws,ldr+1,cols,ldr)
-    cw={"اسم العميل":28,"الفرع":20,"مكان الدفع":16,"كود التحويلة":20}
+    cw={"اسم العميل":28,"الفرع":20,"مكان الدفع":16,"كود التحويلة":20,"رقم المرجع":18}
     for ci,col in enumerate(cols,1):
         ws.column_dimensions[get_column_letter(ci)].width=cw.get(col,18)
     ws.freeze_panes="A3"
@@ -583,7 +583,6 @@ def generate_reports_excel_daily(df_display, original_df):
     ws_br.freeze_panes = "A3"
 
     # ─────────────────────────────────────────────
-    # ─────────────────────────────────────────────
     def style_sheet_colored(ws, df_part, title_text):
         ws.sheet_view.rightToLeft = True
         cols = list(df_part.columns)
@@ -613,7 +612,6 @@ def generate_reports_excel_daily(df_display, original_df):
                 break
 
         for ri, row in enumerate(df_part.itertuples(index=False), 3):
-            # تحديد لون الصف حسب الكود
             row_code = None
             if code_ci:
                 row_code = str(row[code_ci - 1]) if len(row) >= code_ci else None
@@ -637,7 +635,8 @@ def generate_reports_excel_daily(df_display, original_df):
         ldr = 2 + len(df_part)
         write_total_row(ws, ldr + 1, cols, ldr)
         ws.freeze_panes = "A3"
-        cw = {"اسم العميل": 28, "الفرع": 20, "كود الخدمة": 16, "مكان الدفع": 16, "كود التحويلة": 20}
+        cw = {"اسم العميل": 28, "الفرع": 20, "كود الخدمة": 16, "مكان الدفع": 16,
+              "كود التحويلة": 20, "رقم المرجع": 18, "وقت الدفع": 12}
         for ci, col in enumerate(cols, 1):
             ws.column_dimensions[get_column_letter(ci)].width = cw.get(col, 17)
 
@@ -654,7 +653,6 @@ def generate_reports_excel_daily(df_display, original_df):
             dd['تاريخ الدفع'] = dd['تاريخ الدفع'].dt.strftime('%Y-%m-%d')
         drop = [c for c in dd.columns if c.startswith('_') or c == 'id']
         dd   = dd.drop(columns=drop, errors='ignore')
-        # ترتيب الصفوف حسب الكود عشان الألوان تكون متجمعة
         if 'كود الخدمة' in dd.columns:
             dd = dd.sort_values('كود الخدمة').reset_index(drop=True)
         ws_day = wb.create_sheet(str(d)[:31])
@@ -747,9 +745,10 @@ def reports_page():
         codes = ["الكل"] + sorted(df_acc['كود الخدمة'].dropna().unique().tolist())
         sel_code = st.selectbox("🏷️ كود الخدمة", codes, key="r_code")
 
-    # صف ثاني: بحث بالاسم
-    fc5, fc6 = st.columns([3, 1])
-    with fc5: s_name = st.text_input("🔎 بحث بالاسم أو الكود", key="r_search")
+    # صف ثاني: بحث بالاسم + الرقم القومي / رقم المرجع
+    fc5, fc6 = st.columns(2)
+    with fc5: s_name = st.text_input("🔎 بحث بالاسم أو كود العميل", key="r_search")
+    with fc6: s_nat  = st.text_input("🆔 بحث بالرقم القومي / رقم المرجع", key="r_nat")
     st.markdown('</div>', unsafe_allow_html=True)
 
     mask = (df_acc['تاريخ الدفع'].dt.date >= start_d) & (df_acc['تاريخ الدفع'].dt.date <= end_d)
@@ -758,6 +757,8 @@ def reports_page():
     if s_name:
         mask &= (df_acc['client_name'].astype(str).str.contains(s_name, na=False, case=False) |
                  df_acc['client_code'].astype(str).str.contains(s_name, na=False, case=False))
+    if s_nat:
+        mask &= df_acc['رقم المرجع'].astype(str).str.contains(s_nat, na=False, case=False)
 
     final_df = df_acc.loc[mask]
     if final_df.empty:
@@ -793,7 +794,6 @@ def reports_page():
     # ── كروت تفاصيل الأكواد ──
     st.markdown('<div class="sec-title">📋 تفاصيل الأكواد</div>', unsafe_allow_html=True)
     num_codes = len(code_stats)
-    # على الموبايل max عمودين، على التابلت 3، على الكمبيوتر max 4
     cols_count = min(num_codes, 4) if num_codes > 0 else 1
     code_cols = st.columns(cols_count)
     for i, row in enumerate(code_stats.itertuples(index=False)):
@@ -811,16 +811,9 @@ def reports_page():
             )
 
     with st.expander("📅 الملخص اليومي", expanded=False):
-        # ألوان ثابتة لكل كود
         CODE_COLORS_HTML = [
-            "#dbeafe",  # أزرق فاتح
-            "#dcfce7",  # أخضر فاتح
-            "#fef9c3",  # أصفر فاتح
-            "#fce7f3",  # وردي فاتح
-            "#ede9fe",  # بنفسجي فاتح
-            "#ffedd5",  # برتقالي فاتح
-            "#cffafe",  # سماوي فاتح
-            "#fee2e2",  # أحمر فاتح
+            "#dbeafe","#dcfce7","#fef9c3","#fce7f3",
+            "#ede9fe","#ffedd5","#cffafe","#fee2e2",
         ]
         CODE_TEXT_HTML = [
             "#1e40af","#166534","#854d0e","#9d174d",
@@ -837,7 +830,6 @@ def reports_page():
         temp_daily['_date'] = temp_daily['تاريخ الدفع'].dt.date
         dates_sorted = sorted(temp_daily['_date'].dropna().unique())
 
-        # بناء جدول HTML موحد لكل الأيام
         rows_html = ""
         for d in dates_sorted:
             df_day = temp_daily[temp_daily['_date'] == d]
@@ -853,7 +845,6 @@ def reports_page():
                 bg, fg = code_color_map_html[code]
                 cnt = len(df_code)
                 amt = df_code['المبلغ'].sum()
-                # عمود التاريخ يظهر بس في أول كود في اليوم
                 date_cell = (
                     f"<td rowspan='{rowspan_val}' "
                     f"style='padding:10px 14px;text-align:center;border-bottom:2px solid #cbd5e1;"
@@ -872,7 +863,6 @@ def reports_page():
                     f"</tr>"
                 )
                 first_code = False
-            # صف إجمالي اليوم
             rows_html += (
                 f"<tr style='background:#1e3a8a;'>"
                 f"<td style='padding:10px 14px;text-align:center;color:#fff;font-weight:800;"
@@ -886,7 +876,6 @@ def reports_page():
                 f"</tr>"
             )
 
-        # صف الإجمالي الكلي
         grand_count = len(final_df)
         grand_amt   = final_df['المبلغ'].sum()
         rows_html += (
@@ -919,7 +908,6 @@ def reports_page():
         )
 
     with st.expander("🏢 ملخص الفروع اليومي", expanded=False):
-        # نفس خريطة الألوان المستخدمة في الملخص اليومي
         _CODE_COLORS_HTML = [
             "#dbeafe","#dcfce7","#fef9c3","#fce7f3",
             "#ede9fe","#ffedd5","#cffafe","#fee2e2",
@@ -940,7 +928,6 @@ def reports_page():
         _all_branches  = sorted(_temp['branch_name'].dropna().unique().tolist())
         _dates_sorted  = sorted(_temp['_date'].dropna().unique())
 
-        # دليل الألوان
         _legend = " &nbsp; ".join([
             f"<span style='background:{_code_color_map[c][0]};color:{_code_color_map[c][1]};"
             f"padding:3px 10px;border-radius:10px;font-size:12px;font-weight:700;'>{c}</span>"
@@ -962,7 +949,6 @@ def reports_page():
             br_total_cnt = len(df_br)
             br_total_amt = df_br['المبلغ'].sum()
 
-            # حساب الـ rowspan = عدد (يوم × كود) موجودين + صف إجمالي كل يوم
             br_day_code_rows = sum(
                 sum(1 for c in _all_codes if not df_br[(df_br['_date']==d) & (df_br['كود الخدمة']==c)].empty)
                 for d in _dates_sorted if not df_br[df_br['_date']==d].empty
@@ -978,7 +964,7 @@ def reports_page():
                 day_cnt = len(df_day_br)
                 day_amt = df_day_br['المبلغ'].sum()
                 codes_here = [c for c in _all_codes if not df_day_br[df_day_br['كود الخدمة']==c].empty]
-                day_rowspan = len(codes_here) + 1  # +1 لصف إجمالي اليوم
+                day_rowspan = len(codes_here) + 1
 
                 first_code_in_day = True
                 for code in _all_codes:
@@ -989,7 +975,6 @@ def reports_page():
                     cnt = len(df_dc)
                     amt = df_dc['المبلغ'].sum()
 
-                    # خلية الفرع — تظهر بس مرة واحدة مع rowspan
                     br_cell = (
                         f"<td rowspan='{br_rowspan}' style='padding:10px 12px;text-align:center;"
                         f"border-bottom:2px solid #1e3a8a;border-left:1px solid #e2e8f0;"
@@ -998,7 +983,6 @@ def reports_page():
                         f"font-size:12px;writing-mode:vertical-rl;'>{br}</td>"
                     ) if (first_day_in_br and first_code_in_day) else ""
 
-                    # خلية اليوم — تظهر مرة واحدة لكل يوم مع rowspan
                     day_cell = (
                         f"<td rowspan='{day_rowspan}' style='padding:9px 10px;text-align:center;"
                         f"border-bottom:1px solid #cbd5e1;font-weight:700;color:#1e3a8a;"
@@ -1019,7 +1003,6 @@ def reports_page():
                     first_code_in_day = False
                     first_day_in_br   = False
 
-                # صف إجمالي اليوم داخل الفرع
                 _rows += (
                     f"<tr style='background:#0f172a;'>"
                     f"<td style='padding:9px 10px;text-align:center;color:#93c5fd;font-weight:800;"
@@ -1033,7 +1016,6 @@ def reports_page():
                     f"</tr>"
                 )
 
-        # صف الإجمالي الكلي
         _rows += (
             f"<tr style='background:#1e3a8a;'>"
             f"<td colspan='2' style='padding:12px;text-align:center;color:#fff;font-weight:800;font-size:13px;'>الإجمالي الكلي</td>"
@@ -1057,34 +1039,33 @@ def reports_page():
             unsafe_allow_html=True
         )
 
+    # ── البيانات التفصيلية ──
     st.markdown('<div class="sec-title">📋 البيانات التفصيلية</div>', unsafe_allow_html=True)
     display_df = final_df.copy().rename(columns={
-        'client_code':       'كود العميل',
-        'client_name':       'اسم العميل',
-        'branch_name':       'الفرع',
-        'CODE':              'مكان الدفع',
-        'transaction_code':  'كود التحويلة',
+        'client_code':  'كود العميل',
+        'client_name':  'اسم العميل',
+        'branch_name':  'الفرع',
     })
     drop_cols = [c for c in display_df.columns if c.startswith('_') or c == 'id']
     display_df = display_df.drop(columns=drop_cols, errors='ignore')
     if 'تاريخ الدفع' in display_df.columns:
         display_df['تاريخ الدفع'] = display_df['تاريخ الدفع'].dt.strftime('%Y-%m-%d')
 
-    # ── عرض الأعمدة المهمة فقط بعرض محدد ──
-    show_cols = ['الفرع', 'كود العميل', 'اسم العميل', 'تاريخ الدفع',
-                 'المبلغ', 'كود الخدمة', 'مكان الدفع', 'كود التحويلة']
+    # الأعمدة المعروضة — تشمل رقم المرجع الآن
+    show_cols = ['الفرع', 'كود العميل', 'اسم العميل', 'رقم المرجع',
+                 'تاريخ الدفع', 'وقت الدفع', 'المبلغ', 'كود الخدمة']
     show_cols = [c for c in show_cols if c in display_df.columns]
     view_df   = display_df[show_cols]
 
     col_config = {
-        'الفرع':         st.column_config.TextColumn('الفرع',         width=120),
-        'كود العميل':    st.column_config.TextColumn('كود العميل',    width=100),
-        'اسم العميل':    st.column_config.TextColumn('اسم العميل',    width=150),
-        'تاريخ الدفع':   st.column_config.TextColumn('تاريخ الدفع',   width=100),
-        'المبلغ':        st.column_config.NumberColumn('المبلغ',       width=90,  format='%.2f'),
-        'كود الخدمة':    st.column_config.TextColumn('كود الخدمة',    width=90),
-        'مكان الدفع':    st.column_config.TextColumn('مكان الدفع',    width=100),
-        'كود التحويلة':  st.column_config.TextColumn('كود التحويلة',  width=130),
+        'الفرع':       st.column_config.TextColumn('الفرع',       width=110),
+        'كود العميل':  st.column_config.TextColumn('كود العميل',  width=85),
+        'اسم العميل':  st.column_config.TextColumn('اسم العميل',  width=130),
+        'رقم المرجع':  st.column_config.TextColumn('رقم المرجع',  width=120),
+        'تاريخ الدفع': st.column_config.TextColumn('تاريخ الدفع', width=90),
+        'وقت الدفع':   st.column_config.TextColumn('وقت الدفع',   width=75),
+        'المبلغ':      st.column_config.NumberColumn('المبلغ',     width=85, format='%.2f'),
+        'كود الخدمة':  st.column_config.TextColumn('كود الخدمة',  width=80),
     }
 
     st.dataframe(view_df, use_container_width=True, hide_index=True,
@@ -1160,7 +1141,6 @@ def outstanding_page():
     if not branch_col:
         st.error("❌ لم يتم العثور على عمود الفرع"); return
 
-    # فلترة الصلاحيات
     if not is_admin and branches_list:
         df_acc=df_raw[df_raw[branch_col].astype(str).isin(branches_list)].copy()
     else:
@@ -1207,11 +1187,9 @@ def outstanding_page():
     if df_acc.empty:
         st.warning("⚠️ لا توجد بيانات تطابق معايير البحث"); return
 
-    # ── تحويل الأعمدة لـ numeric ──
     for c in [inst_col, fawry_col, opay_col]:
         if c: df_acc[c] = pd.to_numeric(df_acc[c], errors='coerce').fillna(0)
 
-    # ── حساب المدفوع لكل صف = فوري + Opay ──
     fawry_series = df_acc[fawry_col] if fawry_col else pd.Series(0, index=df_acc.index)
     opay_series  = df_acc[opay_col]  if opay_col  else pd.Series(0, index=df_acc.index)
     inst_series  = df_acc[inst_col]  if inst_col  else pd.Series(0, index=df_acc.index)
@@ -1220,7 +1198,6 @@ def outstanding_page():
     df_acc['_inst']      = inst_series
     df_acc['_remaining'] = (df_acc['_inst'] - df_acc['_paid']).clip(lower=0)
 
-    # ── تحديد الحالة ──
     def get_status(row):
         paid = row['_paid']
         inst = row['_inst']
@@ -1234,7 +1211,6 @@ def outstanding_page():
     df_acc['_sk'] = df_acc['حالة الدفع'].map(status_order)
     df_acc = df_acc.sort_values('_sk').drop('_sk', axis=1)
 
-    # ── الإحصائيات الكلية ──
     ti = df_acc['_inst'].sum()
     tp = df_acc['_paid'].sum()
     tr = ti - tp
@@ -1247,7 +1223,6 @@ def outstanding_page():
     df_unpaid  = df_acc[df_acc['حالة الدفع'] == "❌ غير مدفوع"]
     unpaid_cnt = len(df_unpaid)
 
-    # ── KPIs ──
     k1,k2,k3,k4 = st.columns(4)
     with k1:
         st.markdown(
@@ -1285,7 +1260,6 @@ def outstanding_page():
                 </div>
             </div>''', unsafe_allow_html=True)
 
-    # ── بانر تحذير لو في مسدد جزئي ──
     if partial_cnt > 0:
         st.markdown(
             f'''<div style="background:linear-gradient(90deg,#fffbeb,#fef3c7);
@@ -1307,7 +1281,6 @@ def outstanding_page():
                 </div>
             </div>''', unsafe_allow_html=True)
 
-    # ===== ملخص الفروع =====
     unique_branches = df_acc[branch_col].dropna().unique().tolist()
 
     def build_branch_table(df_data, title_prefix=""):
