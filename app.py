@@ -1096,7 +1096,7 @@ def show_list_tab(user, is_admin, user_branches):
       <th style='padding:11px 12px;color:#fff;text-align:center;white-space:nowrap;'>طريقة الاستقبال</th>
       <th style='padding:11px 12px;color:#fff;text-align:center;white-space:nowrap;'>موقف الشكوى</th>
       <th style='padding:11px 12px;color:#fff;text-align:center;white-space:nowrap;'>المدخل</th>
-     <tr></thead><tbody>
+     </tr></thead><tbody>
     """
     for i, row in filtered.iterrows():
         bg = "#f8fafc" if i % 2 == 0 else "#ffffff"
@@ -1187,9 +1187,45 @@ def show_list_tab(user, is_admin, user_branches):
             RESP_OPTS = ["تليفونيا", "وسائل تواصل اجتماعي", "بريد الكتروني", "خطاب"]
             STATUS_OPTS = ["قيد الدراسة", "مقبول", "مرفوض", "تم الحل جزئياً", "تم الحل"]
 
-            ec1, ec2 = st.columns(2)
-            with ec1:
-                # معالجة القيمة None أو NaT
+            # عرض الحقول التي يمكن تعديلها للمستخدم العادي
+            if is_admin:
+                # المسؤول يمكنه تعديل كل شيء
+                ec1, ec2 = st.columns(2)
+                with ec1:
+                    curr_notif = sel.get('notification_date')
+                    if curr_notif is None or pd.isna(curr_notif):
+                        notif_val = datetime.now().date()
+                    else:
+                        try:
+                            notif_val = pd.to_datetime(curr_notif).date()
+                        except:
+                            notif_val = datetime.now().date()
+                    new_notif = st.date_input("📅 تاريخ إبلاغ العميل بنتيجة الشكوى", value=notif_val)
+                with ec2:
+                    curr_resp = sel.get('response_method') or RESP_OPTS[0]
+                    resp_idx = RESP_OPTS.index(curr_resp) if curr_resp in RESP_OPTS else 0
+                    new_resp = st.selectbox("📞 طريقة الرد على الشاكي", RESP_OPTS, index=resp_idx)
+
+                curr_status = sel.get('final_status') or STATUS_OPTS[0]
+                st_idx = STATUS_OPTS.index(curr_status) if curr_status in STATUS_OPTS else 0
+                new_status = st.selectbox("📊 موقف الشكوى النهائي", STATUS_OPTS, index=st_idx)
+
+                new_inv = st.text_area(
+                    "🔍 موجز ما انتهى إليه فحص الشكوى من رأى",
+                    value=sel.get('investigation_summary') or "", height=90
+                )
+
+                new_rej = ""
+                if new_status == "مرفوض":
+                    new_rej = st.text_area(
+                        "⚠️ المبررات في حالة رفض الشكوى",
+                        value=sel.get('rejection_justification') or "", height=70
+                    )
+            else:
+                # المستخدم العادي: يعرض فقط الحقول القابلة للتعديل (بدون موقف الشكوى)
+                st.info("📝 يمكنك اقتراح تغييرات على الشكوى. سيتم مراجعتها من قبل الإدارة.")
+                
+                # حقل تاريخ الإبلاغ
                 curr_notif = sel.get('notification_date')
                 if curr_notif is None or pd.isna(curr_notif):
                     notif_val = datetime.now().date()
@@ -1199,26 +1235,25 @@ def show_list_tab(user, is_admin, user_branches):
                     except:
                         notif_val = datetime.now().date()
                 new_notif = st.date_input("📅 تاريخ إبلاغ العميل بنتيجة الشكوى", value=notif_val)
-            with ec2:
+                
+                # حقل طريقة الرد
                 curr_resp = sel.get('response_method') or RESP_OPTS[0]
                 resp_idx = RESP_OPTS.index(curr_resp) if curr_resp in RESP_OPTS else 0
                 new_resp = st.selectbox("📞 طريقة الرد على الشاكي", RESP_OPTS, index=resp_idx)
-
-            curr_status = sel.get('final_status') or STATUS_OPTS[0]
-            st_idx = STATUS_OPTS.index(curr_status) if curr_status in STATUS_OPTS else 0
-            new_status = st.selectbox("📊 موقف الشكوى النهائي", STATUS_OPTS, index=st_idx)
-
-            new_inv = st.text_area(
-                "🔍 موجز ما انتهى إليه فحص الشكوى من رأى",
-                value=sel.get('investigation_summary') or "", height=90
-            )
-
-            new_rej = ""
-            if new_status == "مرفوض":
-                new_rej = st.text_area(
-                    "⚠️ المبررات في حالة رفض الشكوى",
-                    value=sel.get('rejection_justification') or "", height=70
+                
+                # حقل موجز الفحص
+                new_inv = st.text_area(
+                    "🔍 موجز ما انتهى إليه فحص الشكوى من رأى",
+                    value=sel.get('investigation_summary') or "", height=90
                 )
+                
+                # المستخدم العادي لا يمكنه تغيير حالة الشكوى
+                new_status = sel.get('final_status') or STATUS_OPTS[0]
+                st.info(f"⚠️ حالة الشكوى الحالية: **{new_status}** (لا يمكن تغييرها إلا من قبل الإدارة)")
+                
+                new_rej = ""
+                if new_status == "مرفوض" and sel.get('rejection_justification'):
+                    st.info(f"سبب الرفض الحالي: {sel.get('rejection_justification')}")
 
             edit_note_txt = st.text_input("💬 ملاحظة إضافية لطلب التعديل (اختياري)")
 
@@ -1226,9 +1261,11 @@ def show_list_tab(user, is_admin, user_branches):
 
             if btn_submit:
                 changes = {}
+                
+                # مقارنة القيم فقط إذا كانت مختلفة
                 old_n = str(sel.get('notification_date') or "")
                 new_n = new_notif.isoformat()
-                if old_n != new_n:
+                if old_n != new_n and old_n != "None" and old_n != "":
                     changes['notification_date'] = {"old": old_n if old_n != "None" else "", "new": new_n, "label": "تاريخ إبلاغ العميل"}
 
                 old_r = sel.get('response_method') or ""
@@ -1236,20 +1273,22 @@ def show_list_tab(user, is_admin, user_branches):
                     changes['response_method'] = {"old": old_r if old_r != "None" else "", "new": new_resp, "label": "طريقة الرد على الشاكي"}
 
                 old_i = sel.get('investigation_summary') or ""
-                if old_i != new_inv.strip():
+                if old_i != new_inv.strip() and new_inv.strip() != "":
                     changes['investigation_summary'] = {"old": old_i, "new": new_inv.strip() or "", "label": "موجز نتيجة الفحص"}
 
-                old_s = sel.get('final_status') or ""
-                if old_s != new_status:
-                    changes['final_status'] = {"old": old_s, "new": new_status, "label": "موقف الشكوى النهائي"}
+                # فقط المسؤول يمكنه تغيير الحالة
+                if is_admin:
+                    old_s = sel.get('final_status') or ""
+                    if old_s != new_status:
+                        changes['final_status'] = {"old": old_s, "new": new_status, "label": "موقف الشكوى النهائي"}
 
-                if new_status == "مرفوض":
-                    old_rej = sel.get('rejection_justification') or ""
-                    if old_rej != new_rej.strip():
-                        changes['rejection_justification'] = {"old": old_rej, "new": new_rej.strip() or "", "label": "مبررات الرفض"}
+                    if new_status == "مرفوض":
+                        old_rej = sel.get('rejection_justification') or ""
+                        if old_rej != new_rej.strip():
+                            changes['rejection_justification'] = {"old": old_rej, "new": new_rej.strip() or "", "label": "مبررات الرفض"}
 
                 if not changes:
-                    st.warning("⚠️ لم تُجرِ أي تغييرات!")
+                    st.warning("⚠️ لم تقم بإجراء أي تغييرات على الحقول! قم بتعديل قيمة أحد الحقول ثم أرسل الطلب.")
                 else:
                     if edit_note_txt:
                         changes['_note'] = edit_note_txt
@@ -1260,9 +1299,9 @@ def show_list_tab(user, is_admin, user_branches):
                         )
                     if ok:
                         st.success("✅ تم إرسال طلب التعديل — في انتظار موافقة الإدارة.")
+                        st.rerun()
                     else:
                         st.error(f"❌ خطأ: {result}")
-
 
 # ── تبويب 3: طلبات التعديل ───────────────────────────────────────
 def show_edit_requests_tab(user, is_admin):
