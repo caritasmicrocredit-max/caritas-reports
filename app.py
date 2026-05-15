@@ -305,39 +305,19 @@ def write_total_row(ws, total_row, cols, last_data_row):
 
 # ===================== جلب البيانات =====================
 
-def fetch_reports_data(start_date=None, end_date=None):
-    from datetime import date
-    
-    # افتراضي: الشهر الحالي
-    today = date.today()
-    if start_date is None:
-        start_date = today.replace(day=1)
-    if end_date is None:
-        end_date = today
-
+def fetch_reports_data():
     all_data, limit, offset = [], 1000, 0
-    max_rows = 10000
-
-    while len(all_data) < max_rows:
-        res = (
-            supabase.table("all_payments_report")
-            .select("*")
-            .gte("تاريخ الدفع", start_date.isoformat())
-            .lte("تاريخ الدفع", end_date.isoformat())
-            .range(offset, offset + limit - 1)
-            .execute()
-        )
-        if not res.data:
-            break
+    while True:
+        res = supabase.table("all_payments_report").select("*").range(offset, offset+limit-1).execute()
+        if not res.data: break
         all_data.extend(res.data)
-        if len(res.data) < limit:
-            break
+        if len(res.data) < limit: break
         offset += limit
-
-    df = pd.DataFrame(all_data[:max_rows])
+    df = pd.DataFrame(all_data)
     if not df.empty:
         df['تاريخ الدفع'] = pd.to_datetime(df['تاريخ الدفع'], dayfirst=True, errors='coerce')
     return df
+
 def fetch_outstanding_data():
     all_data, limit, offset = [], 1000, 0
     while True:
@@ -1693,10 +1673,10 @@ def reports_page():
     if 'user' not in st.session_state:
         st.warning("⚠️ يجب تسجيل الدخول أولاً"); st.stop()
 
-    user = st.session_state['user']
+    user=st.session_state['user']
     show_header(user)
 
-    col_back, col_title = st.columns([1, 6])
+    col_back, col_title = st.columns([1,6])
     with col_back:
         if st.button("🏠 الرئيسية"):
             st.query_params.clear(); st.rerun()
@@ -1706,34 +1686,20 @@ def reports_page():
     is_admin      = user.get('role') == 'admin'
     user_branches = user.get('branches', [])
 
-    # ── تواريخ الشهر الحالي كافتراضي ──
-    from datetime import date
-    today        = date.today()
-    default_from = today.replace(day=1)
-    default_to   = today
+    with st.spinner("جاري تحميل البيانات..."):
+        df_raw = fetch_reports_data()
+    if df_raw.empty:
+        st.info("📭 لا توجد بيانات متاحة"); return
 
-    # ── فلتر التاريخ أولاً عشان نجيب البيانات بناءً عليه ──
+    df_acc  = df_raw if is_admin else df_raw[df_raw['branch_name'].isin(user_branches)]
+    v_dates = df_acc['تاريخ الدفع'].dropna()
+    if v_dates.empty:
+        st.info("📭 لا توجد تواريخ متاحة"); return
+
     st.markdown('<div class="filter-bar"><div class="filter-bar-title">🔍 أدوات البحث والتصفية</div>', unsafe_allow_html=True)
     fc1, fc2, fc3, fc4 = st.columns(4)
-    with fc1:
-        start_d = st.date_input("📅 من تاريخ", default_from, key="r_from")
-    with fc2:
-        end_d = st.date_input("📅 إلى تاريخ", default_to, key="r_to")
-
-    # ── جيب البيانات بناءً على التاريخ المختار ──
-    with st.spinner("جاري تحميل البيانات..."):
-        df_raw = fetch_reports_data(start_date=start_d, end_date=end_d)
-
-    if df_raw.empty:
-        st.markdown('</div>', unsafe_allow_html=True)
-        st.info("📭 لا توجد بيانات في هذه الفترة"); return
-
-    df_acc = df_raw if is_admin else df_raw[df_raw['branch_name'].isin(user_branches)]
-
-    if df_acc.empty:
-        st.markdown('</div>', unsafe_allow_html=True)
-        st.info("📭 لا توجد بيانات متاحة لفرعك في هذه الفترة"); return
-
+    with fc1: start_d = st.date_input("📅 من تاريخ", v_dates.min().date(), key="r_from")
+    with fc2: end_d   = st.date_input("📅 إلى تاريخ", v_dates.max().date(), key="r_to")
     with fc3:
         all_branches_r = ["الكل"] + sorted(df_acc['branch_name'].dropna().unique().tolist())
         sel_branch = st.selectbox("🏢 الفرع", all_branches_r, key="r_branch")
@@ -1742,23 +1708,16 @@ def reports_page():
         sel_code = st.selectbox("🏷️ كود الخدمة", codes, key="r_code")
 
     fc5, fc6 = st.columns(2)
-    with fc5:
-        s_name = st.text_input("🔎 بحث بالاسم أو كود العميل", key="r_search")
-    with fc6:
-        s_nat = st.text_input("🆔 بحث بالرقم القومي / رقم المرجع", key="r_nat")
+    with fc5: s_name = st.text_input("🔎 بحث بالاسم أو كود العميل", key="r_search")
+    with fc6: s_nat  = st.text_input("🆔 بحث بالرقم القومي / رقم المرجع", key="r_nat")
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # ── تطبيق باقي الفلاتر على البيانات المجلوبة ──
-    mask = pd.Series(True, index=df_acc.index)
-    if sel_branch != "الكل":
-        mask &= (df_acc['branch_name'] == sel_branch)
-    if sel_code != "الكل":
-        mask &= (df_acc['كود الخدمة'] == sel_code)
+    mask = (df_acc['تاريخ الدفع'].dt.date >= start_d) & (df_acc['تاريخ الدفع'].dt.date <= end_d)
+    if sel_branch != "الكل": mask &= (df_acc['branch_name'] == sel_branch)
+    if sel_code   != "الكل": mask &= (df_acc['كود الخدمة'] == sel_code)
     if s_name:
-        mask &= (
-            df_acc['client_name'].astype(str).str.contains(s_name, na=False, case=False) |
-            df_acc['client_code'].astype(str).str.contains(s_name, na=False, case=False)
-        )
+        mask &= (df_acc['client_name'].astype(str).str.contains(s_name, na=False, case=False) |
+                 df_acc['client_code'].astype(str).str.contains(s_name, na=False, case=False))
     if s_nat:
         mask &= df_acc['رقم المرجع'].astype(str).str.contains(s_nat, na=False, case=False)
 
@@ -1766,10 +1725,9 @@ def reports_page():
     if final_df.empty:
         st.warning("⚠️ لا توجد بيانات تطابق معايير البحث"); return
 
-    # ── باقي الكود زي ما هو من هنا ──
     code_stats = (
         final_df.groupby('كود الخدمة')
-        .agg(عدد=('المبلغ', 'count'), مبلغ=('المبلغ', 'sum'))
+        .agg(عدد=('المبلغ','count'), مبلغ=('المبلغ','sum'))
         .reset_index()
         .sort_values('عدد', ascending=False)
     )
@@ -1881,35 +1839,27 @@ def reports_page():
     }
     st.dataframe(view_df, use_container_width=True, hide_index=True, height=420, column_config=col_config)
 
-    # ── بنر تحذير لو وصل الحد الأقصى ──
-    if len(df_raw) >= 10000:
-        st.warning("⚠️ تم الوصول للحد الأقصى 10,000 سطر — قلّل نطاق التواريخ للحصول على بيانات أدق")
-
     st.markdown('<div class="sec-title">📥 تحميل التقرير</div>', unsafe_allow_html=True)
-    dl1, dl2, dl3 = st.columns([2, 2, 2])
+    dl1,dl2,dl3=st.columns([2,2,2])
     with dl1:
-        split_mode = st.radio("نوع التنزيل", ["كل البيانات في شيت واحد","تقسيم يوم يوم (شيت لكل يوم)"], key="r_split")
+        split_mode=st.radio("نوع التنزيل",["كل البيانات في شيت واحد","تقسيم يوم يوم (شيت لكل يوم)"],key="r_split")
     with dl2:
-        selected_day = "كل الأيام"
-        if split_mode == "تقسيم يوم يوم (شيت لكل يوم)":
-            av = sorted(final_df['تاريخ الدفع'].dropna().dt.date.unique())
-            selected_day = st.selectbox("اختر اليوم", ["كل الأيام"]+[str(d) for d in av], key="r_day")
+        selected_day="كل الأيام"
+        if split_mode=="تقسيم يوم يوم (شيت لكل يوم)":
+            av=sorted(final_df['تاريخ الدفع'].dropna().dt.date.unique())
+            selected_day=st.selectbox("اختر اليوم",["كل الأيام"]+[str(d) for d in av],key="r_day")
     with dl3:
-        if split_mode == "تقسيم يوم يوم (شيت لكل يوم)":
-            if selected_day == "كل الأيام":
-                xls = generate_reports_excel_daily(display_df, final_df)
-                fname = f"تقرير_كل_الأيام_{datetime.now().date()}.xlsx"
+        if split_mode=="تقسيم يوم يوم (شيت لكل يوم)":
+            if selected_day=="كل الأيام":
+                xls=generate_reports_excel_daily(display_df,final_df); fname=f"تقرير_كل_الأيام_{datetime.now().date()}.xlsx"
             else:
-                sd  = pd.to_datetime(selected_day).date()
-                ddf = display_df[pd.to_datetime(display_df['تاريخ الدفع'], errors='coerce').dt.date == sd]
-                xls = generate_reports_excel_single(ddf, sheet_title=selected_day, report_title=f"تقرير سدادات يوم {selected_day}")
-                fname = f"تقرير_{selected_day}.xlsx"
+                sd=pd.to_datetime(selected_day).date()
+                ddf=display_df[pd.to_datetime(display_df['تاريخ الدفع'],errors='coerce').dt.date==sd]
+                xls=generate_reports_excel_single(ddf,sheet_title=selected_day,report_title=f"تقرير سدادات يوم {selected_day}"); fname=f"تقرير_{selected_day}.xlsx"
         else:
-            xls   = generate_reports_excel_single(display_df, report_title=f"تقرير السدادات - {start_d} إلى {end_d}")
-            fname = f"تقرير_{datetime.now().date()}.xlsx"
-        st.download_button("📊 تحميل Excel", data=xls, file_name=fname,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True)
+            xls=generate_reports_excel_single(display_df,report_title=f"تقرير السدادات - {start_d} إلى {end_d}"); fname=f"تقرير_{datetime.now().date()}.xlsx"
+        st.download_button("📊 تحميل Excel",data=xls,file_name=fname,mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",use_container_width=True)
+
 
 # ===================================================================
 # ===================== صفحة الأقساط المستحقة =====================
@@ -2193,7 +2143,7 @@ def main_app():
     </div>
     """, unsafe_allow_html=True)
 
-    # ===================== داشبورد الكروت - حل نهائي للموبايل =====================
+    # ===================== داشبورد الكروت - محسن للموبايل =====================
     st.markdown('<div class="sec-title">🚀 الخدمات المتاحة</div>', unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns(3, gap="small")
@@ -2202,48 +2152,42 @@ def main_app():
         st.markdown("""
         <div style="background: linear-gradient(135deg, #fefce8, #fef9c3); 
                     padding: 28px 12px 20px; border-radius: 18px; text-align: center; 
-                    border: 1px solid #fde047; box-shadow: 0 3px 12px rgba(0,0,0,0.07);">
+                    border: 1px solid #fde047; box-shadow: 0 3px 12px rgba(0,0,0,0.07); 
+                    transition: all 0.3s ease; cursor: pointer;" 
+             onclick="window.location.href='?page=complaints'">
             <div style="font-size: 48px; margin-bottom: 10px;">📝</div>
             <div style="font-weight: 700; font-size: 15.5px; color: #854d0e; line-height:1.3;">شكاوى العملاء</div>
         </div>
         """, unsafe_allow_html=True)
-        
-        if st.button("دخول → شكاوى العملاء", use_container_width=True, type="primary", key="btn_comp"):
-            st.query_params["page"] = "complaints"
-            st.rerun()
 
     with col2:
         st.markdown("""
         <div style="background: linear-gradient(135deg, #ecfdf5, #d1fae5); 
                     padding: 28px 12px 20px; border-radius: 18px; text-align: center; 
-                    border: 1px solid #a7f3d0; box-shadow: 0 3px 12px rgba(0,0,0,0.07);">
+                    border: 1px solid #a7f3d0; box-shadow: 0 3px 12px rgba(0,0,0,0.07); 
+                    transition: all 0.3s ease; cursor: pointer;" 
+             onclick="window.location.href='?page=installments'">
             <div style="font-size: 48px; margin-bottom: 10px;">📋</div>
             <div style="font-weight: 700; font-size: 15.5px; color: #166534; line-height:1.3;">الأقساط المستحقة</div>
         </div>
         """, unsafe_allow_html=True)
-        
-        if st.button("دخول → الأقساط المستحقة", use_container_width=True, type="primary", key="btn_inst"):
-            st.query_params["page"] = "installments"
-            st.rerun()
 
     with col3:
         st.markdown("""
         <div style="background: linear-gradient(135deg, #eff6ff, #dbeafe); 
                     padding: 28px 12px 20px; border-radius: 18px; text-align: center; 
-                    border: 1px solid #bfdbfe; box-shadow: 0 3px 12px rgba(0,0,0,0.07);">
+                    border: 1px solid #bfdbfe; box-shadow: 0 3px 12px rgba(0,0,0,0.07); 
+                    transition: all 0.3s ease; cursor: pointer;" 
+             onclick="window.location.href='?page=reports'">
             <div style="font-size: 48px; margin-bottom: 10px;">💳</div>
             <div style="font-weight: 700; font-size: 15.5px; color: #1e40af; line-height:1.3;">سداد فوري & Opay</div>
         </div>
         """, unsafe_allow_html=True)
         
-        if st.button("دخول → سداد فوري", use_container_width=True, type="primary", key="btn_rep"):
-            st.query_params["page"] = "reports"
-            st.rerun()
-
     st.markdown("""
     <div style="text-align:center;margin-top:40px;padding:20px;
                 color:#94a3b8;font-size:12px;border-top:1px solid #e2e8f0;">
-        نظام كاريتاس للتقارير © 2026 | تصميم متكامل لإدارة الشكاوى والتقارير المالية
+        نظام كاريتاس للتقارير © 2025 | تصميم متكامل لإدارة الشكاوى والتقارير المالية
     </div>
     """, unsafe_allow_html=True)
 
