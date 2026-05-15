@@ -1895,6 +1895,10 @@ def outstanding_page():
 # ===================== الصفحة الرئيسية =====================
 # ===================================================================
 
+# ===================================================================
+# ===================== الصفحة الرئيسية (تم إصلاحها) =================
+# ===================================================================
+
 def main_app():
     if 'user' not in st.session_state:
         st.markdown("""
@@ -1904,7 +1908,7 @@ def main_app():
             <div style="font-size:28px;font-weight:800;color:white;margin-bottom:6px">نظام كاريتاس</div>
             <div style="color:#93c5fd;font-size:14px">لوحة التقارير والمتابعة</div>
         </div>
-        """,unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
         c1,c2,c3=st.columns([1,1.4,1])
         with c2:
             with st.form("login_form"):
@@ -1948,13 +1952,13 @@ def main_app():
             مرحباً <strong style="color:#1e3a8a">{user['full_name']}</strong> — اختر الخدمة
         </span>
     </div>
-    """,unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
-    # ✅ بناء الكروت باستخدام HTML GRID مباشرة بدون st.columns
+    # ✅ بناء الكروت الثلاثة بشكل صحيح ومنفصل
     cards_html = "<div class='prog-cards-grid'>"
     
-    # كارت سداد فوري
-    cards_html += f"""
+    # 1. كارت سداد فوري (بدون شارة إشعارات)
+    cards_html += """
     <div class='prog-card' onclick="window.location.href='?page=reports'">
         <span class='prog-card-icon'>💳</span>
         <div class='prog-card-name'>سداد فوري & Opay</div>
@@ -1963,8 +1967,8 @@ def main_app():
     </div>
     """
     
-    # كارت الأقساط المستحقة
-    cards_html += f"""
+    # 2. كارت الأقساط المستحقة (بدون شارة إشعارات)
+    cards_html += """
     <div class='prog-card' onclick="window.location.href='?page=installments'">
         <span class='prog-card-icon'>📋</span>
         <div class='prog-card-name'>الأقساط المستحقة</div>
@@ -1973,25 +1977,28 @@ def main_app():
     </div>
     """
     
-    # كارت شكاوى العملاء مع الإشعارات
-    notif_badge = ""
+    # 3. كارت شكاوى العملاء (مع شارة الإشعارات إذا وجدت)
+    notif_badge_html = ""
     if unread_count > 0:
-        notif_badge = f"<span class='prog-card-notif-badge'>🔔 {unread_count}</span>"
+        notif_badge_html = f"<span class='prog-card-notif-badge'>🔔 {unread_count}</span>"
     
+    # نضيف الكارت الثالث مع شارة الإشعارات داخله
     cards_html += f"""
     <div class='prog-card' onclick="window.location.href='?page=complaints'">
-        {notif_badge}
+        {notif_badge_html}
         <span class='prog-card-icon'>📝</span>
         <div class='prog-card-name'>شكاوى العملاء</div>
         <div class='prog-card-desc'>تسجيل ومتابعة شكاوى العملاء — إدخال وتعديل وموافقة إدارية</div>
         <span class='prog-card-badge'>✅ متاح الآن</span>
     </div>
     """
+    
     cards_html += "</div>"
     
+    # عرض الكروت في Streamlit
     st.markdown(cards_html, unsafe_allow_html=True)
 
-    # أزرار الفتح المستقلة (اختياري للتوافق مع الجوالات)
+    # أزرار الفتح الاحتياطية (في حال عدم عمل الضغط على الكارت في بعض البيئات)
     st.markdown("---")
     btn_cols = st.columns(3)
     with btn_cols[0]:
@@ -2013,7 +2020,6 @@ def main_app():
         نظام كاريتاس للتقارير © 2025
     </div>
     """, unsafe_allow_html=True)
-
 
 # ===================================================================
 # ===================== تشغيل التطبيق =====================
