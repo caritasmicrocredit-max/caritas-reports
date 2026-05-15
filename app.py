@@ -49,57 +49,61 @@ html, body, .main, .block-container { direction: rtl; }
 .sys-header-sub   { color:#93c5fd; font-size:12px; margin-top:2px; }
 .sys-header-user  { text-align:left; color:#bfdbfe; font-size:13px; line-height:1.7; }
 
-/* ======= كروت البرامج ======= */
-.prog-cards-grid {
+/* ======= داشبورد ======= */
+.dashboard-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 24px;
-    margin-bottom: 32px;
+    gap: 28px;
+    margin: 20px 0 40px;
 }
 @media (max-width: 900px) {
-    .prog-cards-grid { grid-template-columns: 1fr; }
+    .dashboard-grid { grid-template-columns: 1fr; }
 }
-.prog-card {
-    background:#fff;
-    border-radius:20px;
-    padding:30px 26px 20px;
-    box-shadow:0 4px 24px rgba(30,58,138,0.10);
-    border:2px solid #e0e7ff;
-    position:relative;
-    overflow:hidden;
-    cursor:pointer;
-    transition: box-shadow 0.2s, transform 0.15s;
+.dashboard-card {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    border-radius: 24px;
+    padding: 28px 20px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    position: relative;
+    overflow: hidden;
 }
-.prog-card:hover {
-    box-shadow: 0 8px 32px rgba(30,58,138,0.18);
-    transform: translateY(-2px);
+.dashboard-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 20px 35px -12px rgba(0,0,0,0.2);
+    border-color: #cbd5e1;
 }
-.prog-card::before {
-    content:'';
-    position:absolute;
-    top:0; right:0;
-    width:6px; height:100%;
-    background:linear-gradient(180deg,#2563eb,#06b6d4);
-    border-radius:0 18px 18px 0;
+.dashboard-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #2563eb, #06b6d4);
 }
-.prog-card-icon { font-size:44px; margin-bottom:14px; display:block; }
-.prog-card-name { font-size:20px; font-weight:800; color:#1e3a8a; margin-bottom:8px; }
-.prog-card-desc { font-size:13px; color:#64748b; line-height:1.6; margin-bottom:18px; }
-.prog-card-badge {
-    display:inline-block;
-    background:linear-gradient(90deg,#2563eb,#06b6d4);
-    color:#fff; font-size:11px; font-weight:700;
-    padding:4px 14px; border-radius:20px;
+.card-icon { font-size: 56px; margin-bottom: 16px; display: inline-block; }
+.card-title { font-size: 20px; font-weight: 800; color: #1e293b; margin-bottom: 8px; }
+.card-desc { font-size: 13px; color: #64748b; line-height: 1.5; margin-bottom: 20px; }
+.card-badge {
+    display: inline-block;
+    background: #e2e8f0;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 14px;
+    border-radius: 20px;
 }
-.prog-card-notif-badge {
-    position:absolute;
-    top:12px; left:14px;
-    background:#ef4444;
-    color:#fff;
-    font-size:11px;
-    font-weight:700;
-    padding:2px 10px;
-    border-radius:20px;
+.notif-badge-card {
+    position: absolute;
+    top: 12px; right: 12px;
+    background: #ef4444;
+    color: white;
+    font-size: 11px;
+    font-weight: bold;
+    padding: 3px 10px;
+    border-radius: 20px;
 }
 
 /* ======= KPIs ======= */
@@ -201,7 +205,7 @@ html, body, .main, .block-container { direction: rtl; }
 @media (max-width:640px) {
     .sys-header { flex-direction:column; gap:10px; text-align:center; padding:14px 16px; }
     .sys-header-user { text-align:center; }
-    .prog-cards-grid { grid-template-columns: 1fr; }
+    .dashboard-grid { grid-template-columns: 1fr; }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -210,24 +214,6 @@ html, body, .main, .block-container { direction: rtl; }
 URL = st.secrets["SUPABASE_URL"]
 KEY = st.secrets["SUPABASE_KEY"]
 supabase = create_client(URL, KEY)
-
-PROGRAMS = {
-    "reports": {
-        "name": "سداد فوري & Opay",
-        "icon": "💳",
-        "desc": "عرض وتحليل بيانات السدادات — تقارير دقيقة ومتنوعة",
-    },
-    "installments": {
-        "name": "الأقساط المستحقة",
-        "icon": "📋",
-        "desc": "متابعة الأقساط المستحقة مع بيانات الدفع من فوري و Opay",
-    },
-    "complaints": {
-        "name": "شكاوى العملاء",
-        "icon": "📝",
-        "desc": "تسجيل ومتابعة شكاوى العملاء — إدخال وتعديل وموافقة إدارية",
-    },
-}
 
 # ===================== دوال مساعدة عامة =====================
 
@@ -244,10 +230,7 @@ def show_header(user=None):
     role      = user.get("role", "")      if user else ""
 
     if logo_b64:
-        logo_part = (
-            "<img src='data:image/png;base64," + logo_b64 +
-            "' alt='logo' style='height:52px;border-radius:10px;'>"
-        )
+        logo_part = "<img src='data:image/png;base64," + logo_b64 + "' alt='logo' style='height:52px;border-radius:10px;'>"
     else:
         logo_part = "<span style='font-size:32px'>📊</span>"
 
@@ -287,7 +270,40 @@ def find_col(df, candidates):
         if c in df.columns: return c
     return None
 
-# ===================== جلب بيانات التقارير =====================
+def clean_json_value(value):
+    if value is None:
+        return None
+    if isinstance(value, float):
+        if np.isnan(value) or np.isinf(value):
+            return None
+    if isinstance(value, dict):
+        return {k: clean_json_value(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [clean_json_value(v) for v in value]
+    return value
+
+# ===================== Excel helpers =====================
+
+def thin_border():
+    s = Side(border_style="thin", color="D1D5DB")
+    return Border(left=s, right=s, top=s, bottom=s)
+
+def write_total_row(ws, total_row, cols, last_data_row):
+    for ci in range(1, len(cols)+1):
+        c = ws.cell(row=total_row, column=ci)
+        c.fill=PatternFill("solid",fgColor="BFDBFE")
+        c.border=thin_border()
+        c.alignment=Alignment(horizontal='center',vertical='center')
+        c.font=Font(bold=True,color="1E3A8A",name="Arial",size=11)
+    ws.cell(row=total_row, column=1).value = "✦ الإجمالي"
+    if 'المبلغ' in cols:
+        ci=cols.index('المبلغ')+1
+        cl=get_column_letter(ci)
+        ws.cell(row=total_row,column=ci).value=f"=SUM({cl}3:{cl}{last_data_row})"
+        ws.cell(row=total_row,column=ci).number_format='#,##0.00'
+    ws.row_dimensions[total_row].height=26
+
+# ===================== جلب البيانات =====================
 
 def fetch_reports_data():
     all_data, limit, offset = [], 1000, 0
@@ -312,31 +328,15 @@ def fetch_outstanding_data():
         offset += limit
     return pd.DataFrame(all_data)
 
-# ===================== Excel =====================
-
-def thin_border():
-    s = Side(border_style="thin", color="D1D5DB")
-    return Border(left=s, right=s, top=s, bottom=s)
-
-def write_total_row(ws, total_row, cols, last_data_row):
-    for ci in range(1, len(cols)+1):
-        c = ws.cell(row=total_row, column=ci)
-        c.fill=PatternFill("solid",fgColor="BFDBFE"); c.border=thin_border()
-        c.alignment=Alignment(horizontal='center',vertical='center')
-        c.font=Font(bold=True,color="1E3A8A",name="Arial",size=11)
-    ws.cell(row=total_row, column=1).value = "✦ الإجمالي"
-    if 'المبلغ' in cols:
-        ci=cols.index('المبلغ')+1; cl=get_column_letter(ci)
-        ws.cell(row=total_row,column=ci).value=f"=SUM({cl}3:{cl}{last_data_row})"
-        ws.cell(row=total_row,column=ci).number_format='#,##0.00'
-    ws.row_dimensions[total_row].height=26
+# ===================== Excel generators =====================
 
 def generate_reports_excel_single(df_display, sheet_title="التقرير", report_title="تقرير السدادات"):
     wb=Workbook(); ws=wb.active; ws.title=sheet_title[:31]
     ws.sheet_view.rightToLeft=True
     cols=list(df_display.columns); last_col=get_column_letter(len(cols))
     ws.merge_cells(f'A1:{last_col}1')
-    ws['A1'].value=report_title; ws['A1'].font=Font(bold=True,size=14,color="1E3A8A",name="Arial")
+    ws['A1'].value=report_title
+    ws['A1'].font=Font(bold=True,size=14,color="1E3A8A",name="Arial")
     ws['A1'].fill=PatternFill("solid",fgColor="EFF6FF")
     ws['A1'].alignment=Alignment(horizontal='center',vertical='center')
     ws.row_dimensions[1].height=32
@@ -353,7 +353,8 @@ def generate_reports_excel_single(df_display, sheet_title="التقرير", repo
             c=ws.cell(row=ri,column=ci,value=val)
             c.fill=PatternFill("solid",fgColor=bg)
             c.alignment=Alignment(horizontal='center',vertical='center')
-            c.font=Font(name="Arial",size=10); c.border=thin_border()
+            c.font=Font(name="Arial",size=10)
+            c.border=thin_border()
     ldr=2+len(df_display); write_total_row(ws,ldr+1,cols,ldr)
     cw={"اسم العميل":28,"الفرع":20,"مكان الدفع":16,"كود التحويلة":20,"رقم المرجع":18}
     for ci,col in enumerate(cols,1):
@@ -404,8 +405,10 @@ def generate_reports_excel_daily(df_display, original_df):
             cnt = len(df_code); amt = float(df_code['المبلغ'].sum())
             for ci in range(1, nsc + 1):
                 c = ws_sum.cell(row=cur_row, column=ci)
-                c.fill=PatternFill("solid",fgColor=bg_hex); c.font=Font(bold=True,color=fg_hex,name="Arial",size=10)
-                c.alignment=Alignment(horizontal='center',vertical='center'); c.border=thin_border()
+                c.fill=PatternFill("solid",fgColor=bg_hex)
+                c.font=Font(bold=True,color=fg_hex,name="Arial",size=10)
+                c.alignment=Alignment(horizontal='center',vertical='center')
+                c.border=thin_border()
             ws_sum.cell(row=cur_row, column=1).value = str(d)
             ws_sum.cell(row=cur_row, column=2).value = code
             ws_sum.cell(row=cur_row, column=3).value = cnt
@@ -415,8 +418,10 @@ def generate_reports_excel_daily(df_display, original_df):
         day_end = cur_row - 1
         for ci in range(1, nsc + 1):
             c = ws_sum.cell(row=cur_row, column=ci)
-            c.fill=PatternFill("solid",fgColor="0F172A"); c.font=Font(bold=True,color="FFFFFF",name="Arial",size=11)
-            c.alignment=Alignment(horizontal='center',vertical='center'); c.border=thin_border()
+            c.fill=PatternFill("solid",fgColor="0F172A")
+            c.font=Font(bold=True,color="FFFFFF",name="Arial",size=11)
+            c.alignment=Alignment(horizontal='center',vertical='center')
+            c.border=thin_border()
         ws_sum.cell(row=cur_row, column=1).value = f"✦ إجمالي {d}"
         ws_sum.cell(row=cur_row, column=2).value = "الكل"
         ws_sum.cell(row=cur_row, column=3).value = f"=SUM(C{day_start}:C{day_end})"
@@ -431,8 +436,10 @@ def generate_reports_excel_daily(df_display, original_df):
         bg_hex, fg_hex = code_color_map[code]
         for ci in range(1, nsc + 1):
             c = ws_sum.cell(row=cur_row, column=ci)
-            c.fill=PatternFill("solid",fgColor=bg_hex); c.font=Font(bold=True,color=fg_hex,name="Arial",size=11)
-            c.alignment=Alignment(horizontal='center',vertical='center'); c.border=thin_border()
+            c.fill=PatternFill("solid",fgColor=bg_hex)
+            c.font=Font(bold=True,color=fg_hex,name="Arial",size=11)
+            c.alignment=Alignment(horizontal='center',vertical='center')
+            c.border=thin_border()
         ws_sum.cell(row=cur_row, column=1).value = "✦ إجمالي كود"
         ws_sum.cell(row=cur_row, column=2).value = code
         ws_sum.cell(row=cur_row, column=3).value = f'=SUMIF(B3:B{data_end_sum},"{code}",C3:C{data_end_sum})'
@@ -444,8 +451,10 @@ def generate_reports_excel_daily(df_display, original_df):
     code_rows_start = cur_row - len(all_codes); code_rows_end = cur_row - 1
     for ci in range(1, nsc + 1):
         c = ws_sum.cell(row=cur_row, column=ci)
-        c.fill=PatternFill("solid",fgColor="1E3A8A"); c.font=Font(bold=True,color="FFFFFF",name="Arial",size=12)
-        c.alignment=Alignment(horizontal='center',vertical='center'); c.border=thin_border()
+        c.fill=PatternFill("solid",fgColor="1E3A8A")
+        c.font=Font(bold=True,color="FFFFFF",name="Arial",size=12)
+        c.alignment=Alignment(horizontal='center',vertical='center')
+        c.border=thin_border()
     ws_sum.cell(row=cur_row, column=1).value = "✦ الإجمالي الكلي"
     ws_sum.cell(row=cur_row, column=2).value = "جميع الأكواد"
     ws_sum.cell(row=cur_row, column=3).value = f"=SUM(C{code_rows_start}:C{code_rows_end})"
@@ -470,7 +479,8 @@ def generate_reports_excel_daily(df_display, original_df):
         c = ws_br.cell(row=2, column=ci, value=h)
         c.font=Font(bold=True,color=WHT,name="Arial",size=11)
         c.fill=PatternFill("solid",fgColor=DARK)
-        c.alignment=Alignment(horizontal='center',vertical='center'); c.border=thin_border()
+        c.alignment=Alignment(horizontal='center',vertical='center')
+        c.border=thin_border()
     ws_br.row_dimensions[2].height = 24
 
     all_branches = sorted(temp['branch_name'].dropna().unique().tolist()) if 'branch_name' in temp.columns else []
@@ -490,57 +500,80 @@ def generate_reports_excel_daily(df_display, original_df):
                 cnt = len(df_dc); amt = float(df_dc['المبلغ'].sum())
                 for ci in range(1, nbr + 1):
                     c = ws_br.cell(row=br_row, column=ci)
-                    c.fill=PatternFill("solid",fgColor=bg_hex); c.font=Font(bold=True,color=fg_hex,name="Arial",size=10)
-                    c.alignment=Alignment(horizontal='center',vertical='center'); c.border=thin_border()
-                ws_br.cell(row=br_row,column=1).value=br; ws_br.cell(row=br_row,column=2).value=str(d)
-                ws_br.cell(row=br_row,column=3).value=code; ws_br.cell(row=br_row,column=4).value=cnt
-                ws_br.cell(row=br_row,column=5).value=amt; ws_br.cell(row=br_row,column=5).number_format='#,##0.00'
+                    c.fill=PatternFill("solid",fgColor=bg_hex)
+                    c.font=Font(bold=True,color=fg_hex,name="Arial",size=10)
+                    c.alignment=Alignment(horizontal='center',vertical='center')
+                    c.border=thin_border()
+                ws_br.cell(row=br_row,column=1).value=br
+                ws_br.cell(row=br_row,column=2).value=str(d)
+                ws_br.cell(row=br_row,column=3).value=code
+                ws_br.cell(row=br_row,column=4).value=cnt
+                ws_br.cell(row=br_row,column=5).value=amt
+                ws_br.cell(row=br_row,column=5).number_format='#,##0.00'
                 br_row += 1
             day_end = br_row - 1
             for ci in range(1, nbr + 1):
                 c = ws_br.cell(row=br_row, column=ci)
-                c.fill=PatternFill("solid",fgColor="0F172A"); c.font=Font(bold=True,color="FFFFFF",name="Arial",size=10)
-                c.alignment=Alignment(horizontal='center',vertical='center'); c.border=thin_border()
-            ws_br.cell(row=br_row,column=1).value=br; ws_br.cell(row=br_row,column=2).value=f"✦ إجمالي {d}"
+                c.fill=PatternFill("solid",fgColor="0F172A")
+                c.font=Font(bold=True,color="FFFFFF",name="Arial",size=10)
+                c.alignment=Alignment(horizontal='center',vertical='center')
+                c.border=thin_border()
+            ws_br.cell(row=br_row,column=1).value=br
+            ws_br.cell(row=br_row,column=2).value=f"✦ إجمالي {d}"
             ws_br.cell(row=br_row,column=3).value="الكل"
             ws_br.cell(row=br_row,column=4).value=f"=SUM(D{day_section_start}:D{day_end})"
             ws_br.cell(row=br_row,column=5).value=f"=SUM(E{day_section_start}:E{day_end})"
             ws_br.cell(row=br_row,column=5).number_format='#,##0.00'
-            ws_br.row_dimensions[br_row].height=22; br_row += 1
+            ws_br.row_dimensions[br_row].height=22
+            br_row += 1
         br_section_end = br_row - 1
         for ci in range(1, nbr + 1):
             c = ws_br.cell(row=br_row, column=ci)
-            c.fill=PatternFill("solid",fgColor=TBG); c.font=Font(bold=True,color=DARK,name="Arial",size=11)
-            c.alignment=Alignment(horizontal='center',vertical='center'); c.border=thin_border()
-        ws_br.cell(row=br_row,column=1).value=f"✦ إجمالي {br}"; ws_br.cell(row=br_row,column=2).value="—"
+            c.fill=PatternFill("solid",fgColor=TBG)
+            c.font=Font(bold=True,color=DARK,name="Arial",size=11)
+            c.alignment=Alignment(horizontal='center',vertical='center')
+            c.border=thin_border()
+        ws_br.cell(row=br_row,column=1).value=f"✦ إجمالي {br}"
+        ws_br.cell(row=br_row,column=2).value="—"
         ws_br.cell(row=br_row,column=3).value="الكل"
         ws_br.cell(row=br_row,column=4).value=f'=SUMIF(C{br_section_start}:C{br_section_end},"الكل",D{br_section_start}:D{br_section_end})'
         ws_br.cell(row=br_row,column=5).value=f'=SUMIF(C{br_section_start}:C{br_section_end},"الكل",E{br_section_start}:E{br_section_end})'
-        ws_br.cell(row=br_row,column=5).number_format='#,##0.00'; ws_br.row_dimensions[br_row].height=26; br_row+=1
+        ws_br.cell(row=br_row,column=5).number_format='#,##0.00'
+        ws_br.row_dimensions[br_row].height=26
+        br_row+=1
 
     data_end_br = br_row - 1
     for code in all_codes:
         bg_hex, fg_hex = code_color_map[code]
         for ci in range(1, nbr + 1):
             c = ws_br.cell(row=br_row, column=ci)
-            c.fill=PatternFill("solid",fgColor=bg_hex); c.font=Font(bold=True,color=fg_hex,name="Arial",size=11)
-            c.alignment=Alignment(horizontal='center',vertical='center'); c.border=thin_border()
-        ws_br.cell(row=br_row,column=1).value="✦ إجمالي كود"; ws_br.cell(row=br_row,column=2).value="—"
+            c.fill=PatternFill("solid",fgColor=bg_hex)
+            c.font=Font(bold=True,color=fg_hex,name="Arial",size=11)
+            c.alignment=Alignment(horizontal='center',vertical='center')
+            c.border=thin_border()
+        ws_br.cell(row=br_row,column=1).value="✦ إجمالي كود"
+        ws_br.cell(row=br_row,column=2).value="—"
         ws_br.cell(row=br_row,column=3).value=code
         ws_br.cell(row=br_row,column=4).value=f'=SUMIF(C3:C{data_end_br},"{code}",D3:D{data_end_br})'
         ws_br.cell(row=br_row,column=5).value=f'=SUMIF(C3:C{data_end_br},"{code}",E3:E{data_end_br})'
-        ws_br.cell(row=br_row,column=5).number_format='#,##0.00'; ws_br.row_dimensions[br_row].height=24; br_row+=1
+        ws_br.cell(row=br_row,column=5).number_format='#,##0.00'
+        ws_br.row_dimensions[br_row].height=24
+        br_row+=1
 
     code_rows_start_br = br_row - len(all_codes); code_rows_end_br = br_row - 1
     for ci in range(1, nbr + 1):
         c = ws_br.cell(row=br_row, column=ci)
-        c.fill=PatternFill("solid",fgColor="1E3A8A"); c.font=Font(bold=True,color="FFFFFF",name="Arial",size=12)
-        c.alignment=Alignment(horizontal='center',vertical='center'); c.border=thin_border()
-    ws_br.cell(row=br_row,column=1).value="✦ الإجمالي الكلي"; ws_br.cell(row=br_row,column=2).value="—"
+        c.fill=PatternFill("solid",fgColor="1E3A8A")
+        c.font=Font(bold=True,color="FFFFFF",name="Arial",size=12)
+        c.alignment=Alignment(horizontal='center',vertical='center')
+        c.border=thin_border()
+    ws_br.cell(row=br_row,column=1).value="✦ الإجمالي الكلي"
+    ws_br.cell(row=br_row,column=2).value="—"
     ws_br.cell(row=br_row,column=3).value="جميع الأكواد"
     ws_br.cell(row=br_row,column=4).value=f"=SUM(D{code_rows_start_br}:D{code_rows_end_br})"
     ws_br.cell(row=br_row,column=5).value=f"=SUM(E{code_rows_start_br}:E{code_rows_end_br})"
-    ws_br.cell(row=br_row,column=5).number_format='#,##0.00'; ws_br.row_dimensions[br_row].height=30
+    ws_br.cell(row=br_row,column=5).number_format='#,##0.00'
+    ws_br.row_dimensions[br_row].height=30
     for ci, w in enumerate([22, 16, 16, 16, 22], 1):
         ws_br.column_dimensions[get_column_letter(ci)].width = w
     ws_br.freeze_panes = "A3"
@@ -549,22 +582,28 @@ def generate_reports_excel_daily(df_display, original_df):
         ws.sheet_view.rightToLeft = True
         cols = list(df_part.columns)
         ws.merge_cells(f'A1:{get_column_letter(len(cols))}1')
-        ws['A1'].value=title_text; ws['A1'].font=Font(bold=True,size=13,color=DARK,name="Arial")
+        ws['A1'].value=title_text
+        ws['A1'].font=Font(bold=True,size=13,color=DARK,name="Arial")
         ws['A1'].fill=PatternFill("solid",fgColor=LIGHT)
         ws['A1'].alignment=Alignment(horizontal='center',vertical='center')
         ws.row_dimensions[1].height=30
         for ci, h in enumerate(cols, 1):
-            c=ws.cell(row=2,column=ci,value=h); c.font=Font(bold=True,color=WHT,name="Arial",size=10)
-            c.fill=PatternFill("solid",fgColor=DARK); c.alignment=Alignment(horizontal='center',vertical='center')
+            c=ws.cell(row=2,column=ci,value=h)
+            c.font=Font(bold=True,color=WHT,name="Arial",size=10)
+            c.fill=PatternFill("solid",fgColor=DARK)
+            c.alignment=Alignment(horizontal='center',vertical='center')
             c.border=thin_border()
         ws.row_dimensions[2].height=22
         code_ci = None
         for ci, col in enumerate(cols, 1):
-            if 'كود' in str(col) and 'خدمة' in str(col): code_ci=ci; break
-            if str(col)=='كود الخدمة': code_ci=ci; break
+            if 'كود' in str(col) and 'خدمة' in str(col):
+                code_ci=ci; break
+            if str(col)=='كود الخدمة':
+                code_ci=ci; break
         for ri, row in enumerate(df_part.itertuples(index=False), 3):
             row_code = None
-            if code_ci: row_code = str(row[code_ci-1]) if len(row)>=code_ci else None
+            if code_ci:
+                row_code = str(row[code_ci-1]) if len(row)>=code_ci else None
             if row_code and row_code in code_color_map:
                 bg_hex, fg_hex = code_color_map[row_code]; use_alt=False
             else:
@@ -573,7 +612,8 @@ def generate_reports_excel_daily(df_display, original_df):
                 c=ws.cell(row=ri,column=ci,value=val)
                 c.fill=PatternFill("solid",fgColor=bg_hex)
                 c.font=Font(name="Arial",size=10,color=fg_hex,bold=(not use_alt))
-                c.alignment=Alignment(horizontal='center',vertical='center'); c.border=thin_border()
+                c.alignment=Alignment(horizontal='center',vertical='center')
+                c.border=thin_border()
         ldr=2+len(df_part); write_total_row(ws,ldr+1,cols,ldr); ws.freeze_panes="A3"
         cw={"اسم العميل":28,"الفرع":20,"كود الخدمة":16,"مكان الدفع":16,"كود التحويلة":20,"رقم المرجع":18,"وقت الدفع":12}
         for ci, col in enumerate(cols, 1):
@@ -582,11 +622,14 @@ def generate_reports_excel_daily(df_display, original_df):
     for d in dates:
         ddf=temp[temp['_date']==d].copy()
         dd=ddf.rename(columns={'client_code':'كود العميل','client_name':'اسم العميل','branch_name':'الفرع','CODE':'مكان الدفع','transaction_code':'كود التحويلة'})
-        if 'تاريخ الدفع' in dd.columns: dd['تاريخ الدفع']=dd['تاريخ الدفع'].dt.strftime('%Y-%m-%d')
+        if 'تاريخ الدفع' in dd.columns:
+            dd['تاريخ الدفع']=dd['تاريخ الدفع'].dt.strftime('%Y-%m-%d')
         drop=[c for c in dd.columns if c.startswith('_') or c=='id']
         dd=dd.drop(columns=drop,errors='ignore')
-        if 'كود الخدمة' in dd.columns: dd=dd.sort_values('كود الخدمة').reset_index(drop=True)
-        ws_day=wb.create_sheet(str(d)[:31]); style_sheet_colored(ws_day,dd,f"تقرير سدادات يوم {d}")
+        if 'كود الخدمة' in dd.columns:
+            dd=dd.sort_values('كود الخدمة').reset_index(drop=True)
+        ws_day=wb.create_sheet(str(d)[:31])
+        style_sheet_colored(ws_day,dd,f"تقرير سدادات يوم {d}")
 
     buf=io.BytesIO(); wb.save(buf); return buf.getvalue()
 
@@ -595,7 +638,8 @@ def generate_outstanding_excel(df, title="تقرير الأقساط المستح
     ws.sheet_view.rightToLeft=True
     cols=list(df.columns); last_col=get_column_letter(len(cols))
     ws.merge_cells(f'A1:{last_col}1')
-    ws['A1'].value=title; ws['A1'].font=Font(bold=True,size=16,color="1E3A8A",name="Arial")
+    ws['A1'].value=title
+    ws['A1'].font=Font(bold=True,size=16,color="1E3A8A",name="Arial")
     ws['A1'].fill=PatternFill("solid",fgColor="EFF6FF")
     ws['A1'].alignment=Alignment(horizontal='center',vertical='center')
     ws.row_dimensions[1].height=35
@@ -628,23 +672,69 @@ def generate_outstanding_excel(df, title="تقرير الأقساط المستح
     ws.freeze_panes="A3"
     buf=io.BytesIO(); wb.save(buf); return buf.getvalue()
 
+def generate_complaints_excel(df):
+    wb = Workbook(); ws = wb.active; ws.title = "سجل الشكاوى"
+    ws.sheet_view.rightToLeft = True
+    headers = [
+        "رقم قيد الشكوى","تاريخ التقديم","الفرع","اسم مقدم الشكوى","صفة مقدم الشكوى",
+        "رقم بطاقة العميل","رقم الهاتف","طريقة الاستقبال","موجز الشكوى","المستندات المرفقة",
+        "تاريخ إبلاغ العميل","طريقة الرد","موجز نتيجة الفحص","موقف الشكوى النهائي",
+        "مبررات الرفض","المدخل"
+    ]
+    db_cols = [
+        "complaint_number","submission_date","branch_name","complainant_name","complainant_role",
+        "client_card_number","client_phone","reception_method","complaint_summary","attached_documents",
+        "notification_date","response_method","investigation_summary","final_status",
+        "rejection_justification","created_by_name"
+    ]
+    last_col = get_column_letter(len(headers))
+    ws.merge_cells(f'A1:{last_col}1')
+    ws['A1'].value = "سجل شكاوى العملاء — تقرير (ج.م.ص./10)"
+    ws['A1'].font = Font(bold=True, size=15, color="1E3A8A", name="Arial")
+    ws['A1'].fill = PatternFill("solid", fgColor="EFF6FF")
+    ws['A1'].alignment = Alignment(horizontal='center', vertical='center')
+    ws.row_dimensions[1].height = 36
+    STATUS_COLORS = {
+        "قيد الدراسة":    ("FEF9C3","854D0E"),
+        "مقبول":          ("DCFCE7","166534"),
+        "مرفوض":          ("FEE2E2","991B1B"),
+        "تم الحل جزئياً": ("DBEAFE","1E40AF"),
+        "تم الحل":        ("D1FAE5","065F46"),
+    }
+    for ci, h in enumerate(headers, 1):
+        c = ws.cell(row=2, column=ci, value=h)
+        c.font = Font(bold=True, color="FFFFFF", name="Arial", size=11)
+        c.fill = PatternFill("solid", fgColor="1E3A8A")
+        c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        c.border = thin_border()
+    ws.row_dimensions[2].height = 28
+    for ri, (_, row) in enumerate(df.iterrows(), 3):
+        status_val = str(row.get("final_status", ""))
+        bg_h, fg_h = STATUS_COLORS.get(status_val, ("F8FAFC","1E293B"))
+        for ci, col in enumerate(db_cols, 1):
+            val = row.get(col, "")
+            if pd.isna(val): val = ""
+            c = ws.cell(row=ri, column=ci, value=str(val) if val else "")
+            c.fill = PatternFill("solid", fgColor=bg_h)
+            c.font = Font(name="Arial", size=10, color=fg_h)
+            c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+            c.border = thin_border()
+        ws.row_dimensions[ri].height = 20
+    COL_WIDTHS = {
+        "complaint_number":18,"submission_date":14,"branch_name":18,"complainant_name":22,
+        "complainant_role":14,"client_card_number":16,"client_phone":14,"reception_method":16,
+        "complaint_summary":35,"attached_documents":25,"notification_date":18,"response_method":18,
+        "investigation_summary":35,"final_status":16,"rejection_justification":28,"created_by_name":18
+    }
+    for ci, col in enumerate(db_cols, 1):
+        ws.column_dimensions[get_column_letter(ci)].width = COL_WIDTHS.get(col, 16)
+    ws.freeze_panes = "A3"
+    buf = io.BytesIO(); wb.save(buf); return buf.getvalue()
+
 
 # ===================================================================
 # ===================== دوال شكاوى العملاء ========================
 # ===================================================================
-
-def clean_json_value(value):
-    """تحويل NaN و Infinity إلى None أو قيم صالحة لـ JSON"""
-    if value is None:
-        return None
-    if isinstance(value, float):
-        if np.isnan(value) or np.isinf(value):
-            return None
-    if isinstance(value, dict):
-        return {k: clean_json_value(v) for k, v in value.items()}
-    if isinstance(value, list):
-        return [clean_json_value(v) for v in value]
-    return value
 
 def generate_complaint_number():
     try:
@@ -670,7 +760,10 @@ def generate_complaint_number():
 def fetch_all_complaints(is_admin, user_branches):
     try:
         res = supabase.table("customer_complaints")\
-            .select("*").order("submission_date", desc=True).execute()
+            .select("*")\
+            .eq("is_deleted", False)\
+            .order("submission_date", desc=True)\
+            .execute()
         df = pd.DataFrame(res.data or [])
         if df.empty:
             return df
@@ -680,6 +773,48 @@ def fetch_all_complaints(is_admin, user_branches):
     except Exception as e:
         st.error(f"خطأ في جلب الشكاوى: {e}")
         return pd.DataFrame()
+
+def fetch_deleted_complaints(is_admin):
+    if not is_admin:
+        return pd.DataFrame()
+    try:
+        res = supabase.table("customer_complaints")\
+            .select("*")\
+            .eq("is_deleted", True)\
+            .order("deleted_at", desc=True)\
+            .execute()
+        return pd.DataFrame(res.data or [])
+    except Exception as e:
+        st.error(f"خطأ في جلب الشكاوى المحذوفة: {e}")
+        return pd.DataFrame()
+
+def soft_delete_complaint(complaint_id, complaint_number, admin_user, reason=""):
+    try:
+        data = {
+            "is_deleted": True,
+            "deleted_at": datetime.now().isoformat(),
+            "deleted_by": admin_user.get('id'),
+            "delete_reason": reason or "تم الحذف بواسطة الإدارة"
+        }
+        supabase.table("customer_complaints").update(data).eq("id", str(complaint_id)).execute()
+        return True
+    except Exception as e:
+        st.error(f"خطأ في حذف الشكوى: {e}")
+        return False
+
+def restore_complaint(complaint_id):
+    try:
+        data = {
+            "is_deleted": False,
+            "deleted_at": None,
+            "deleted_by": None,
+            "delete_reason": None
+        }
+        supabase.table("customer_complaints").update(data).eq("id", str(complaint_id)).execute()
+        return True
+    except Exception as e:
+        st.error(f"خطأ في استرجاع الشكوى: {e}")
+        return False
 
 def insert_new_complaint(data, user):
     try:
@@ -719,9 +854,7 @@ def create_complaint_notification(user_id, title, message, notif_type,
 
 def submit_edit_request_db(complaint_id, complaint_number, branch_name, changes, user):
     try:
-        # تنظيف التغييرات من أي قيم NaN
         cleaned_changes = clean_json_value(changes)
-        
         data = {
             "complaint_id": str(complaint_id),
             "complaint_number": complaint_number,
@@ -761,10 +894,8 @@ def fetch_edit_requests_db(is_admin=False, user_id=None, status_filter=None):
 def process_edit_request_db(request_id, complaint_id, changes, action,
                               admin_user, admin_note, requester_id):
     try:
-        # تنظيف admin_note من NaN
         if admin_note and pd.isna(admin_note):
             admin_note = ""
-        
         supabase.table("complaint_edit_requests").update({
             "status": action,
             "reviewed_by": admin_user.get('id'),
@@ -772,13 +903,11 @@ def process_edit_request_db(request_id, complaint_id, changes, action,
             "reviewed_at": datetime.now().isoformat(),
             "admin_note": admin_note or ""
         }).eq("id", request_id).execute()
-
         if action == "approved":
             update_data = {"updated_at": datetime.now().isoformat()}
             for field, vals in changes.items():
                 if field != "_note" and isinstance(vals, dict):
                     new_val = vals.get('new')
-                    # تنظيف القيمة الجديدة من NaN
                     if pd.isna(new_val):
                         new_val = None
                     update_data[field] = new_val
@@ -824,78 +953,6 @@ def mark_all_notifications_read(user_id):
     except:
         pass
 
-def generate_complaints_excel(df):
-    wb = Workbook(); ws = wb.active; ws.title = "سجل الشكاوى"
-    ws.sheet_view.rightToLeft = True
-
-    headers = [
-        "رقم قيد الشكوى", "تاريخ التقديم", "الفرع",
-        "اسم مقدم الشكوى", "صفة مقدم الشكوى", "رقم بطاقة العميل",
-        "رقم الهاتف", "طريقة الاستقبال", "موجز الشكوى",
-        "المستندات المرفقة", "تاريخ إبلاغ العميل",
-        "طريقة الرد", "موجز نتيجة الفحص",
-        "موقف الشكوى النهائي", "مبررات الرفض", "المدخل"
-    ]
-    db_cols = [
-        "complaint_number", "submission_date", "branch_name",
-        "complainant_name", "complainant_role", "client_card_number",
-        "client_phone", "reception_method", "complaint_summary",
-        "attached_documents", "notification_date",
-        "response_method", "investigation_summary",
-        "final_status", "rejection_justification", "created_by_name"
-    ]
-
-    last_col = get_column_letter(len(headers))
-    ws.merge_cells(f'A1:{last_col}1')
-    ws['A1'].value = f"سجل شكاوى العملاء — تقرير (ج.م.ص./10)"
-    ws['A1'].font = Font(bold=True, size=15, color="1E3A8A", name="Arial")
-    ws['A1'].fill = PatternFill("solid", fgColor="EFF6FF")
-    ws['A1'].alignment = Alignment(horizontal='center', vertical='center')
-    ws.row_dimensions[1].height = 36
-
-    STATUS_COLORS = {
-        "قيد الدراسة":    ("FEF9C3", "854D0E"),
-        "مقبول":          ("DCFCE7", "166534"),
-        "مرفوض":          ("FEE2E2", "991B1B"),
-        "تم الحل جزئياً": ("DBEAFE", "1E40AF"),
-        "تم الحل":        ("D1FAE5", "065F46"),
-    }
-
-    for ci, h in enumerate(headers, 1):
-        c = ws.cell(row=2, column=ci, value=h)
-        c.font = Font(bold=True, color="FFFFFF", name="Arial", size=11)
-        c.fill = PatternFill("solid", fgColor="1E3A8A")
-        c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-        c.border = thin_border()
-    ws.row_dimensions[2].height = 28
-
-    for ri, (_, row) in enumerate(df.iterrows(), 3):
-        status_val = str(row.get("final_status", ""))
-        bg_h, fg_h = STATUS_COLORS.get(status_val, ("F8FAFC", "1E293B"))
-        for ci, col in enumerate(db_cols, 1):
-            val = row.get(col, "")
-            if pd.isna(val): val = ""
-            c = ws.cell(row=ri, column=ci, value=str(val) if val else "")
-            c.fill = PatternFill("solid", fgColor=bg_h)
-            c.font = Font(name="Arial", size=10, color=fg_h)
-            c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-            c.border = thin_border()
-        ws.row_dimensions[ri].height = 20
-
-    COL_WIDTHS = {
-        "complaint_number": 18, "submission_date": 14, "branch_name": 18,
-        "complainant_name": 22, "complainant_role": 14, "client_card_number": 16,
-        "client_phone": 14, "reception_method": 16, "complaint_summary": 35,
-        "attached_documents": 25, "notification_date": 18,
-        "response_method": 18, "investigation_summary": 35,
-        "final_status": 16, "rejection_justification": 28, "created_by_name": 18
-    }
-    for ci, col in enumerate(db_cols, 1):
-        ws.column_dimensions[get_column_letter(ci)].width = COL_WIDTHS.get(col, 16)
-
-    ws.freeze_panes = "A3"
-    buf = io.BytesIO(); wb.save(buf); return buf.getvalue()
-
 
 # ===================================================================
 # ===================== واجهات شكاوى العملاء =======================
@@ -909,21 +966,19 @@ def _parse_branches(user_branches):
 
 def _status_badge(status):
     COLOR = {
-        "قيد الدراسة":    ("#FEF9C3", "#92400E"),
-        "مقبول":          ("#DCFCE7", "#166534"),
-        "مرفوض":          ("#FEE2E2", "#991B1B"),
-        "تم الحل جزئياً": ("#DBEAFE", "#1E40AF"),
-        "تم الحل":        ("#D1FAE5", "#065F46"),
+        "قيد الدراسة":    ("#FEF9C3","#92400E"),
+        "مقبول":          ("#DCFCE7","#166534"),
+        "مرفوض":          ("#FEE2E2","#991B1B"),
+        "تم الحل جزئياً": ("#DBEAFE","#1E40AF"),
+        "تم الحل":        ("#D1FAE5","#065F46"),
     }
-    bg, fg = COLOR.get(str(status), ("#F1F5F9", "#475569"))
-    return (
-        f"<span style='background:{bg};color:{fg};font-weight:700;font-size:11px;"
-        f"padding:3px 12px;border-radius:20px;white-space:nowrap;'>{status}</span>"
-    )
+    bg, fg = COLOR.get(str(status), ("#F1F5F9","#475569"))
+    return (f"<span style='background:{bg};color:{fg};font-weight:700;font-size:11px;"
+            f"padding:3px 12px;border-radius:20px;white-space:nowrap;'>{status}</span>")
 
 def _request_status_badge(status):
-    COLOR = {"pending": ("#FEF9C3","#92400E"), "approved": ("#DCFCE7","#166534"), "rejected": ("#FEE2E2","#991B1B")}
-    LABEL = {"pending": "⏳ قيد الانتظار", "approved": "✅ موافق عليه", "rejected": "❌ مرفوض"}
+    COLOR = {"pending":("#FEF9C3","#92400E"),"approved":("#DCFCE7","#166534"),"rejected":("#FEE2E2","#991B1B")}
+    LABEL = {"pending":"⏳ قيد الانتظار","approved":"✅ موافق عليه","rejected":"❌ مرفوض"}
     bg, fg = COLOR.get(status, ("#F1F5F9","#475569"))
     lbl = LABEL.get(status, status)
     return f"<span style='background:{bg};color:{fg};font-weight:700;font-size:11px;padding:3px 12px;border-radius:20px;'>{lbl}</span>"
@@ -964,14 +1019,14 @@ def show_entry_tab(user, is_admin, user_branches):
             sub_date = st.date_input("📅 تاريخ تقديم الشكوى *", value=datetime.now().date())
         with c3:
             reception = st.selectbox("📞 طريقة استقبال الشكوى *",
-                ["تليفونيا", "وسائل تواصل اجتماعي", "بريد الكتروني", "حضور شخصي", "خطاب"])
+                ["تليفونيا","وسائل تواصل اجتماعي","بريد الكتروني","حضور شخصي","خطاب"])
 
         c4, c5, c6 = st.columns(3)
         with c4:
             comp_name = st.text_input("👤 اسم مقدم الشكوى *")
         with c5:
             comp_role = st.selectbox("🔖 صفة مقدم الشكوى",
-                ["عميل", "ضامن", "عمل", "ذو صلة بعميل", "أخرى"])
+                ["عميل","ضامن","عمل","ذو صلة بعميل","أخرى"])
         with c6:
             card_num = st.text_input("🪪 رقم بطاقة العميل")
 
@@ -989,8 +1044,8 @@ def show_entry_tab(user, is_admin, user_branches):
 
         if submitted:
             errors = []
-            if not comp_name.strip():  errors.append("اسم مقدم الشكوى")
-            if not summary.strip():    errors.append("بيان موجز بموضوع الشكوى")
+            if not comp_name.strip(): errors.append("اسم مقدم الشكوى")
+            if not summary.strip():   errors.append("بيان موجز بموضوع الشكوى")
             if errors:
                 st.error(f"❌ الحقول التالية مطلوبة: {' — '.join(errors)}")
             else:
@@ -1010,6 +1065,7 @@ def show_entry_tab(user, is_admin, user_branches):
                         "final_status":       "قيد الدراسة",
                         "created_by":         user.get('id'),
                         "created_by_name":    user.get('full_name'),
+                        "is_deleted":         False,
                     }
                     ok, result = insert_new_complaint(data, user)
                 if ok:
@@ -1055,9 +1111,9 @@ def show_list_tab(user, is_admin, user_branches):
     st.markdown('</div>', unsafe_allow_html=True)
 
     mask = pd.Series(True, index=df.index)
-    if sel_br  != "الكل": mask &= df['branch_name']      == sel_br
-    if sel_st  != "الكل": mask &= df['final_status']      == sel_st
-    if sel_rec != "الكل": mask &= df['reception_method']  == sel_rec
+    if sel_br  != "الكل": mask &= df['branch_name']     == sel_br
+    if sel_st  != "الكل": mask &= df['final_status']     == sel_st
+    if sel_rec != "الكل": mask &= df['reception_method'] == sel_rec
     if srch:
         mask &= (
             df['complainant_name'].astype(str).str.contains(srch, case=False, na=False) |
@@ -1068,7 +1124,8 @@ def show_list_tab(user, is_admin, user_branches):
 
     filtered = df[mask].reset_index(drop=True)
     if filtered.empty:
-        st.warning("⚠️ لا توجد نتائج تطابق معايير البحث"); return
+        st.warning("⚠️ لا توجد نتائج تطابق معايير البحث")
+        return
 
     cnt = filtered['final_status'].value_counts()
     k1, k2, k3, k4 = st.columns(4)
@@ -1096,7 +1153,7 @@ def show_list_tab(user, is_admin, user_branches):
       <th style='padding:11px 12px;color:#fff;text-align:center;white-space:nowrap;'>طريقة الاستقبال</th>
       <th style='padding:11px 12px;color:#fff;text-align:center;white-space:nowrap;'>موقف الشكوى</th>
       <th style='padding:11px 12px;color:#fff;text-align:center;white-space:nowrap;'>المدخل</th>
-     </tr></thead><tbody>
+    </tr></thead><tbody>
     """
     for i, row in filtered.iterrows():
         bg = "#f8fafc" if i % 2 == 0 else "#ffffff"
@@ -1158,7 +1215,7 @@ def show_list_tab(user, is_admin, user_branches):
             st.markdown(f"**رقم الهاتف:** {sel.get('client_phone','—') or '—'}")
             st.markdown(f"**طريقة الاستقبال:** {sel.get('reception_method','—')}")
         with d3:
-            st.markdown(f"**الموقف النهائي:** ", unsafe_allow_html=False)
+            st.markdown("**الموقف النهائي:**")
             st.markdown(_status_badge(sel.get('final_status','—')), unsafe_allow_html=True)
             st.markdown(f"**تاريخ إبلاغ العميل:** {str(sel.get('notification_date','—') or '—')[:10]}")
             st.markdown(f"**طريقة الرد:** {sel.get('response_method','—') or '—'}")
@@ -1169,52 +1226,43 @@ def show_list_tab(user, is_admin, user_branches):
 
         if sel.get('attached_documents'):
             st.markdown(f"**📎 المستندات المرفقة:** {sel['attached_documents']}")
-
         if sel.get('investigation_summary'):
             st.markdown("**🔍 موجز نتيجة الفحص:**")
             st.success(sel['investigation_summary'])
-
         if sel.get('rejection_justification'):
             st.markdown("**⚠️ مبررات الرفض:**")
             st.error(sel['rejection_justification'])
 
     with st.expander("✏️ طلب تعديل هذه الشكوى", expanded=False):
-        st.info(
-            "💡 يمكنك تعديل الحقول التالية — سيُرسل الطلب للإدارة وسيتم إشعارك بالنتيجة."
-        )
+        st.info("💡 يمكنك تعديل الحقول التالية — سيُرسل الطلب للإدارة وسيتم إشعارك بالنتيجة.")
 
         with st.form(f"edit_form_{sel['id'][:8]}"):
-            RESP_OPTS = ["تليفونيا", "وسائل تواصل اجتماعي", "بريد الكتروني", "خطاب"]
-            STATUS_OPTS = ["قيد الدراسة", "مقبول", "مرفوض", "تم الحل جزئياً", "تم الحل"]
+            RESP_OPTS   = ["تليفونيا","وسائل تواصل اجتماعي","بريد الكتروني","خطاب"]
+            STATUS_OPTS = ["قيد الدراسة","مقبول","مرفوض","تم الحل جزئياً","تم الحل"]
 
-            # عرض الحقول التي يمكن تعديلها للمستخدم العادي
             if is_admin:
-                # المسؤول يمكنه تعديل كل شيء
                 ec1, ec2 = st.columns(2)
                 with ec1:
                     curr_notif = sel.get('notification_date')
                     if curr_notif is None or pd.isna(curr_notif):
                         notif_val = datetime.now().date()
                     else:
-                        try:
-                            notif_val = pd.to_datetime(curr_notif).date()
-                        except:
-                            notif_val = datetime.now().date()
+                        try:    notif_val = pd.to_datetime(curr_notif).date()
+                        except: notif_val = datetime.now().date()
                     new_notif = st.date_input("📅 تاريخ إبلاغ العميل بنتيجة الشكوى", value=notif_val)
                 with ec2:
                     curr_resp = sel.get('response_method') or RESP_OPTS[0]
-                    resp_idx = RESP_OPTS.index(curr_resp) if curr_resp in RESP_OPTS else 0
-                    new_resp = st.selectbox("📞 طريقة الرد على الشاكي", RESP_OPTS, index=resp_idx)
+                    resp_idx  = RESP_OPTS.index(curr_resp) if curr_resp in RESP_OPTS else 0
+                    new_resp  = st.selectbox("📞 طريقة الرد على الشاكي", RESP_OPTS, index=resp_idx)
 
                 curr_status = sel.get('final_status') or STATUS_OPTS[0]
-                st_idx = STATUS_OPTS.index(curr_status) if curr_status in STATUS_OPTS else 0
-                new_status = st.selectbox("📊 موقف الشكوى النهائي", STATUS_OPTS, index=st_idx)
+                st_idx      = STATUS_OPTS.index(curr_status) if curr_status in STATUS_OPTS else 0
+                new_status  = st.selectbox("📊 موقف الشكوى النهائي", STATUS_OPTS, index=st_idx)
 
                 new_inv = st.text_area(
                     "🔍 موجز ما انتهى إليه فحص الشكوى من رأى",
                     value=sel.get('investigation_summary') or "", height=90
                 )
-
                 new_rej = ""
                 if new_status == "مرفوض":
                     new_rej = st.text_area(
@@ -1222,66 +1270,49 @@ def show_list_tab(user, is_admin, user_branches):
                         value=sel.get('rejection_justification') or "", height=70
                     )
             else:
-                # المستخدم العادي: يعرض فقط الحقول القابلة للتعديل (بدون موقف الشكوى)
                 st.info("📝 يمكنك اقتراح تغييرات على الشكوى. سيتم مراجعتها من قبل الإدارة.")
-                
-                # حقل تاريخ الإبلاغ
                 curr_notif = sel.get('notification_date')
                 if curr_notif is None or pd.isna(curr_notif):
                     notif_val = datetime.now().date()
                 else:
-                    try:
-                        notif_val = pd.to_datetime(curr_notif).date()
-                    except:
-                        notif_val = datetime.now().date()
+                    try:    notif_val = pd.to_datetime(curr_notif).date()
+                    except: notif_val = datetime.now().date()
                 new_notif = st.date_input("📅 تاريخ إبلاغ العميل بنتيجة الشكوى", value=notif_val)
-                
-                # حقل طريقة الرد
+
                 curr_resp = sel.get('response_method') or RESP_OPTS[0]
-                resp_idx = RESP_OPTS.index(curr_resp) if curr_resp in RESP_OPTS else 0
-                new_resp = st.selectbox("📞 طريقة الرد على الشاكي", RESP_OPTS, index=resp_idx)
-                
-                # حقل موجز الفحص
+                resp_idx  = RESP_OPTS.index(curr_resp) if curr_resp in RESP_OPTS else 0
+                new_resp  = st.selectbox("📞 طريقة الرد على الشاكي", RESP_OPTS, index=resp_idx)
+
                 new_inv = st.text_area(
                     "🔍 موجز ما انتهى إليه فحص الشكوى من رأى",
                     value=sel.get('investigation_summary') or "", height=90
                 )
-                
-                # المستخدم العادي لا يمكنه تغيير حالة الشكوى
                 new_status = sel.get('final_status') or STATUS_OPTS[0]
                 st.info(f"⚠️ حالة الشكوى الحالية: **{new_status}** (لا يمكن تغييرها إلا من قبل الإدارة)")
-                
                 new_rej = ""
-                if new_status == "مرفوض" and sel.get('rejection_justification'):
-                    st.info(f"سبب الرفض الحالي: {sel.get('rejection_justification')}")
 
             edit_note_txt = st.text_input("💬 ملاحظة إضافية لطلب التعديل (اختياري)")
-
             btn_submit = st.form_submit_button("📤 إرسال طلب التعديل", use_container_width=True)
 
             if btn_submit:
                 changes = {}
-                
-                # مقارنة القيم فقط إذا كانت مختلفة
                 old_n = str(sel.get('notification_date') or "")
                 new_n = new_notif.isoformat()
-                if old_n != new_n and old_n != "None" and old_n != "":
-                    changes['notification_date'] = {"old": old_n if old_n != "None" else "", "new": new_n, "label": "تاريخ إبلاغ العميل"}
+                if old_n != new_n and old_n not in ("None",""):
+                    changes['notification_date'] = {"old": old_n, "new": new_n, "label": "تاريخ إبلاغ العميل"}
 
                 old_r = sel.get('response_method') or ""
                 if old_r != new_resp:
-                    changes['response_method'] = {"old": old_r if old_r != "None" else "", "new": new_resp, "label": "طريقة الرد على الشاكي"}
+                    changes['response_method'] = {"old": old_r, "new": new_resp, "label": "طريقة الرد على الشاكي"}
 
                 old_i = sel.get('investigation_summary') or ""
                 if old_i != new_inv.strip() and new_inv.strip() != "":
                     changes['investigation_summary'] = {"old": old_i, "new": new_inv.strip() or "", "label": "موجز نتيجة الفحص"}
 
-                # فقط المسؤول يمكنه تغيير الحالة
                 if is_admin:
                     old_s = sel.get('final_status') or ""
                     if old_s != new_status:
                         changes['final_status'] = {"old": old_s, "new": new_status, "label": "موقف الشكوى النهائي"}
-
                     if new_status == "مرفوض":
                         old_rej = sel.get('rejection_justification') or ""
                         if old_rej != new_rej.strip():
@@ -1303,6 +1334,39 @@ def show_list_tab(user, is_admin, user_branches):
                     else:
                         st.error(f"❌ خطأ: {result}")
 
+    # ── زر الحذف للمسؤول فقط ──
+    if is_admin:
+        st.markdown("---")
+        st.markdown(
+            '<div class="sec-title" style="border-right-color:#dc2626;">⚠️ منطقة المسؤول — حذف شكوى</div>',
+            unsafe_allow_html=True
+        )
+        delete_reason = st.text_input("سبب الحذف (اختياري)", key=f"delete_reason_{sel['id'][:8]}")
+        confirm_key   = f"confirm_delete_{sel['id'][:8]}"
+
+        col_a, col_b, col_c = st.columns([3, 1, 1])
+        with col_b:
+            if st.button("🗑️ حذف الشكوى", key=f"btn_delete_{sel['id'][:8]}", use_container_width=True):
+                st.session_state[confirm_key] = True
+
+        if st.session_state.get(confirm_key, False):
+            st.warning("⚠️ هل أنت متأكد من حذف هذه الشكوى؟ ستُنقل إلى سلة المحذوفات.")
+            col_yes, col_no, _ = st.columns([1, 1, 3])
+            with col_yes:
+                if st.button("✔️ نعم، احذف", key=f"confirm_yes_{sel['id'][:8]}", use_container_width=True):
+                    with st.spinner("جاري حذف الشكوى..."):
+                        if soft_delete_complaint(sel['id'], sel['complaint_number'], user, delete_reason):
+                            st.success(f"✅ تم حذف الشكوى {sel['complaint_number']} ونقلها إلى سلة المحذوفات")
+                            del st.session_state[confirm_key]
+                            st.rerun()
+                        else:
+                            st.error("❌ خطأ في حذف الشكوى")
+            with col_no:
+                if st.button("✖️ إلغاء", key=f"confirm_no_{sel['id'][:8]}", use_container_width=True):
+                    del st.session_state[confirm_key]
+                    st.rerun()
+
+
 # ── تبويب 3: طلبات التعديل ───────────────────────────────────────
 def show_edit_requests_tab(user, is_admin):
     user_id = user.get('id')
@@ -1310,7 +1374,7 @@ def show_edit_requests_tab(user, is_admin):
     st.markdown(f'<div class="sec-title">{title}</div>', unsafe_allow_html=True)
 
     status_filter_opts = ["الكل", "pending", "approved", "rejected"]
-    STATUS_AR = {"الكل": "الكل", "pending": "⏳ قيد الانتظار", "approved": "✅ موافق", "rejected": "❌ مرفوض"}
+    STATUS_AR = {"الكل":"الكل","pending":"⏳ قيد الانتظار","approved":"✅ موافق","rejected":"❌ مرفوض"}
 
     fc1, fc2 = st.columns([2, 4])
     with fc1:
@@ -1329,14 +1393,14 @@ def show_edit_requests_tab(user, is_admin):
     for _, req in df_req.iterrows():
         changes = req.get('changes', {})
         if isinstance(changes, str):
-            try: changes = json.loads(changes)
+            try:   changes = json.loads(changes)
             except: changes = {}
 
         req_status = req.get('status', 'pending')
         note_field = changes.pop('_note', None)
 
-        border_color = {"pending": "#f59e0b", "approved": "#059669", "rejected": "#dc2626"}.get(req_status, "#2563eb")
-        bg_color     = {"pending": "#fffbeb", "approved": "#f0fdf4", "rejected": "#fef2f2"}.get(req_status, "#f8fafc")
+        border_color = {"pending":"#f59e0b","approved":"#059669","rejected":"#dc2626"}.get(req_status,"#2563eb")
+        bg_color     = {"pending":"#fffbeb","approved":"#f0fdf4","rejected":"#fef2f2"}.get(req_status,"#f8fafc")
 
         st.markdown(
             f"<div style='background:{bg_color};border:1.5px solid {border_color};"
@@ -1361,8 +1425,8 @@ def show_edit_requests_tab(user, is_admin):
             for field, vals in changes.items():
                 if field == "_note": continue
                 label = vals.get('label', field)
-                old_v = vals.get('old', '—') or '—'
-                new_v = vals.get('new', '—') or '—'
+                old_v = vals.get('old','—') or '—'
+                new_v = vals.get('new','—') or '—'
                 chg_rows += (
                     f"<tr>"
                     f"<td style='padding:8px 12px;border-bottom:1px solid #e2e8f0;font-weight:600;color:#475569;'>{label}</td>"
@@ -1392,9 +1456,9 @@ def show_edit_requests_tab(user, is_admin):
             st.markdown(f"<span style='font-size:11px;color:#64748b;'>🔍 راجعه {req.get('reviewed_by_name','—')} في {rev_time}</span>", unsafe_allow_html=True)
 
         if is_admin and req_status == "pending":
-            req_id = req.get('id')
-            comp_id = req.get('complaint_id')
-            requester_id = req.get('requested_by')
+            req_id      = req.get('id')
+            comp_id     = req.get('complaint_id')
+            requester_id= req.get('requested_by')
 
             with st.form(f"admin_form_{req_id[:8]}"):
                 admin_note_txt = st.text_input("💬 ملاحظة (اختياري)", key=f"an_{req_id[:8]}")
@@ -1402,7 +1466,7 @@ def show_edit_requests_tab(user, is_admin):
                 with ba:
                     approve_btn = st.form_submit_button("✅ موافقة", use_container_width=True)
                 with bb:
-                    reject_btn = st.form_submit_button("❌ رفض", use_container_width=True)
+                    reject_btn  = st.form_submit_button("❌ رفض", use_container_width=True)
 
                 if approve_btn:
                     with st.spinner("جاري تطبيق التعديل..."):
@@ -1452,22 +1516,20 @@ def show_notifications_tab(user_id):
         )
 
     ICON_MAP = {
-        "new_complaint": ("📝", "notif-card"),
-        "edit_request":  ("✏️", "notif-card edit_request"),
-        "approved":      ("✅", "notif-card approved"),
-        "rejected":      ("❌", "notif-card rejected"),
+        "new_complaint": ("📝","notif-card"),
+        "edit_request":  ("✏️","notif-card edit_request"),
+        "approved":      ("✅","notif-card approved"),
+        "rejected":      ("❌","notif-card rejected"),
     }
 
     for _, n in df_notif.iterrows():
-        ntype = n.get('notification_type', '')
-        is_unread = not n.get('is_read', True)
-        icon, card_cls = ICON_MAP.get(ntype, ("🔔", "notif-card"))
+        ntype    = n.get('notification_type', '')
+        is_unread= not n.get('is_read', True)
+        icon, card_cls = ICON_MAP.get(ntype, ("🔔","notif-card"))
         if is_unread:
             card_cls += " unread"
-
-        ts = str(n.get('created_at', ''))[:16].replace('T', ' ')
+        ts    = str(n.get('created_at',''))[:16].replace('T',' ')
         badge = "<span class='notif-badge'>جديد</span>" if is_unread else ""
-
         st.markdown(
             f"<div class='{card_cls}'>"
             f"{badge}"
@@ -1477,6 +1539,77 @@ def show_notifications_tab(user_id):
             f"</div>",
             unsafe_allow_html=True
         )
+
+
+# ── تبويب 5: سلة المحذوفات (للمسؤول فقط) ────────────────────────
+def show_deleted_complaints_tab(admin_user):
+    st.markdown('<div class="sec-title">🗑️ سلة المحذوفات — الشكاوى المحذوفة</div>', unsafe_allow_html=True)
+    st.warning("⚠️ هذه الشكاوى تم حذفها بواسطة الإدارة. يمكنك استرجاعها أو حذفها نهائياً.")
+
+    with st.spinner("جاري تحميل الشكاوى المحذوفة..."):
+        df_deleted = fetch_deleted_complaints(is_admin=True)
+
+    if df_deleted.empty:
+        st.info("📭 لا توجد شكاوى محذوفة")
+        return
+
+    st.markdown(f"📊 عدد الشكاوى المحذوفة: **{len(df_deleted)}**")
+
+    for idx, row in df_deleted.iterrows():
+        st.markdown(
+            f"<div style='background:#fef2f2;border:1.5px solid #fca5a5;"
+            f"border-right:5px solid #dc2626;border-radius:14px;padding:16px 20px;margin-bottom:14px;'>",
+            unsafe_allow_html=True
+        )
+        col1, col2, col3 = st.columns([3, 2, 1])
+
+        with col1:
+            st.markdown(f"**📝 {row.get('complaint_number','—')}**")
+            st.markdown(f"👤 {row.get('complainant_name','—')} | 🏢 {row.get('branch_name','—')}")
+            st.markdown(f"📅 تاريخ التقديم: {str(row.get('submission_date','—'))[:10]}")
+            if row.get('delete_reason'):
+                st.markdown(f"💬 سبب الحذف: {row['delete_reason']}")
+
+        with col2:
+            st.markdown(f"**🗑️ حذفت بواسطة:** {row.get('deleted_by','—')}")
+            deleted_at = row.get('deleted_at','')
+            if deleted_at:
+                st.markdown(f"📅 تاريخ الحذف: {str(deleted_at)[:16].replace('T',' ')}")
+
+        with col3:
+            if st.button("↩️ استرجاع", key=f"restore_{row['id'][:8]}", use_container_width=True):
+                with st.spinner("جاري الاسترجاع..."):
+                    if restore_complaint(row['id']):
+                        st.success(f"✅ تم استرجاع الشكوى {row['complaint_number']} بنجاح!")
+                        st.rerun()
+                    else:
+                        st.error("❌ خطأ في استرجاع الشكوى")
+
+            perm_key = f"perm_confirm_{row['id'][:8]}"
+            if st.button("💀 حذف نهائي", key=f"perm_delete_{row['id'][:8]}", use_container_width=True):
+                st.session_state[perm_key] = True
+
+            if st.session_state.get(perm_key, False):
+                st.warning("⚠️ هذا لا يمكن التراجع عنه!")
+                col_yes, col_no = st.columns(2)
+                with col_yes:
+                    if st.button("نعم، احذف نهائياً", key=f"perm_yes_{row['id'][:8]}", use_container_width=True):
+                        try:
+                            supabase.table("complaint_notifications").delete().eq("complaint_id", str(row['id'])).execute()
+                            supabase.table("complaint_edit_requests").delete().eq("complaint_id", str(row['id'])).execute()
+                            supabase.table("customer_complaints").delete().eq("id", str(row['id'])).execute()
+                            st.success(f"✅ تم حذف الشكوى {row['complaint_number']} نهائياً!")
+                            del st.session_state[perm_key]
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ خطأ: {e}")
+                with col_no:
+                    if st.button("لا، إلغاء", key=f"perm_no_{row['id'][:8]}", use_container_width=True):
+                        del st.session_state[perm_key]
+                        st.rerun()
+
+        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("---")
 
 
 # ── الصفحة الرئيسية للشكاوى ──────────────────────────────────────
@@ -1494,12 +1627,12 @@ def complaints_page():
     with col_title:
         st.markdown('<div class="sec-title">📝 سجل شكاوى العملاء</div>', unsafe_allow_html=True)
 
-    is_admin     = user.get('role') == 'admin'
+    is_admin      = user.get('role') == 'admin'
     user_branches = _parse_branches(user.get('branches', []))
-    user_id      = user.get('id')
+    user_id       = user.get('id')
 
-    unread = count_unread_notifications(user_id)
-    notif_lbl = f"🔔 الإشعارات  ({unread})" if unread > 0 else "🔔 الإشعارات"
+    unread    = count_unread_notifications(user_id)
+    notif_lbl = f"🔔 الإشعارات ({unread})" if unread > 0 else "🔔 الإشعارات"
 
     if unread > 0:
         st.markdown(
@@ -1513,25 +1646,27 @@ def complaints_page():
             unsafe_allow_html=True
         )
 
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "➕ إدخال شكوى جديدة",
-        "📋 قائمة الشكاوى",
-        "✏️ طلبات التعديل",
-        notif_lbl
-    ])
+    tabs_list = ["➕ إدخال شكوى جديدة", "📋 قائمة الشكاوى", "✏️ طلبات التعديل", notif_lbl]
+    if is_admin:
+        tabs_list.append("🗑️ سلة المحذوفات")
 
-    with tab1:
+    tabs = st.tabs(tabs_list)
+
+    with tabs[0]:
         show_entry_tab(user, is_admin, user_branches)
-    with tab2:
+    with tabs[1]:
         show_list_tab(user, is_admin, user_branches)
-    with tab3:
+    with tabs[2]:
         show_edit_requests_tab(user, is_admin)
-    with tab4:
+    with tabs[3]:
         show_notifications_tab(user_id)
+    if is_admin and len(tabs) > 4:
+        with tabs[4]:
+            show_deleted_complaints_tab(user)
 
 
 # ===================================================================
-# ===================== صفحة فوري =====================
+# ===================== صفحة فوري & Opay =====================
 # ===================================================================
 
 def reports_page():
@@ -1562,7 +1697,6 @@ def reports_page():
         st.info("📭 لا توجد تواريخ متاحة"); return
 
     st.markdown('<div class="filter-bar"><div class="filter-bar-title">🔍 أدوات البحث والتصفية</div>', unsafe_allow_html=True)
-
     fc1, fc2, fc3, fc4 = st.columns(4)
     with fc1: start_d = st.date_input("📅 من تاريخ", v_dates.min().date(), key="r_from")
     with fc2: end_d   = st.date_input("📅 إلى تاريخ", v_dates.max().date(), key="r_to")
@@ -1593,7 +1727,7 @@ def reports_page():
 
     code_stats = (
         final_df.groupby('كود الخدمة')
-        .agg(عدد=('المبلغ', 'count'), مبلغ=('المبلغ', 'sum'))
+        .agg(عدد=('المبلغ','count'), مبلغ=('المبلغ','sum'))
         .reset_index()
         .sort_values('عدد', ascending=False)
     )
@@ -1605,9 +1739,9 @@ def reports_page():
         st.markdown(f'<div class="kpi-card"><div class="kpi-lbl">📊 عدد العمليات</div><div class="kpi-val">{len(final_df):,} حركة</div></div>', unsafe_allow_html=True)
 
     st.markdown('<div class="sec-title">📋 تفاصيل الأكواد</div>', unsafe_allow_html=True)
-    num_codes = len(code_stats)
+    num_codes  = len(code_stats)
     cols_count = min(num_codes, 4) if num_codes > 0 else 1
-    code_cols = st.columns(cols_count)
+    code_cols  = st.columns(cols_count)
     for i, row in enumerate(code_stats.itertuples(index=False)):
         col_idx = i % cols_count
         with code_cols[col_idx]:
@@ -1622,7 +1756,7 @@ def reports_page():
         CODE_COLORS_HTML = ["#dbeafe","#dcfce7","#fef9c3","#fce7f3","#ede9fe","#ffedd5","#cffafe","#fee2e2"]
         CODE_TEXT_HTML   = ["#1e40af","#166534","#854d0e","#9d174d","#6b21a8","#9a3412","#0e7490","#991b1b"]
         all_codes = sorted(final_df['كود الخدمة'].dropna().unique().tolist())
-        code_color_map_html = {c: (CODE_COLORS_HTML[i%len(CODE_COLORS_HTML)],CODE_TEXT_HTML[i%len(CODE_TEXT_HTML)]) for i,c in enumerate(all_codes)}
+        code_color_map_html = {c:(CODE_COLORS_HTML[i%len(CODE_COLORS_HTML)],CODE_TEXT_HTML[i%len(CODE_TEXT_HTML)]) for i,c in enumerate(all_codes)}
         temp_daily = final_df.copy(); temp_daily['_date'] = temp_daily['تاريخ الدفع'].dt.date
         dates_sorted = sorted(temp_daily['_date'].dropna().unique())
         rows_html = ""
@@ -1682,11 +1816,11 @@ def reports_page():
                     first_code_in_day=False; first_day_in_br=False
                 _rows+=(f"<tr style='background:#0f172a;'><td style='padding:9px 10px;text-align:center;color:#93c5fd;font-weight:800;border-bottom:1.5px solid #334155;font-size:11px;'>✦ {d}</td><td style='padding:9px 10px;text-align:center;color:#bfdbfe;font-weight:800;border-bottom:1.5px solid #334155;font-size:11px;'>الكل</td><td style='padding:9px 10px;text-align:center;color:#fff;font-weight:800;border-bottom:1.5px solid #334155;'>{day_cnt:,}</td><td style='padding:9px 10px;text-align:center;color:#fde68a;font-weight:800;border-bottom:1.5px solid #334155;'>{day_amt:,.2f}</td></tr>")
         _rows+=(f"<tr style='background:#1e3a8a;'><td colspan='2' style='padding:12px;text-align:center;color:#fff;font-weight:800;font-size:13px;'>الإجمالي الكلي</td><td style='padding:12px;text-align:center;color:#bfdbfe;font-weight:800;'>—</td><td style='padding:12px;text-align:center;color:#fff;font-weight:800;'>{len(final_df):,}</td><td style='padding:12px;text-align:center;color:#fde68a;font-weight:800;'>{final_df['المبلغ'].sum():,.2f}</td></tr>")
-        st.markdown(f"<div style='overflow-x:auto;'><table style='width:100%;border-collapse:collapse;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 4px 20px rgba(30,58,138,0.12);font-size:12px;'><thead><tr style='background:#1e3a8a;'><th style='{_th_r}'>الفرع</th><th style='{_th}'>التاريخ</th><th style='{_th}'>كود الخدمة</th><th style='{_th}'>عدد الحركات</th><th style='{_th}'>إجمالي المبلغ (ج.م)</th><tr></thead><tbody>{_rows}</tbody></table></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='overflow-x:auto;'><table style='width:100%;border-collapse:collapse;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 4px 20px rgba(30,58,138,0.12);font-size:12px;'><thead><tr style='background:#1e3a8a;'><th style='{_th_r}'>الفرع</th><th style='{_th}'>التاريخ</th><th style='{_th}'>كود الخدمة</th><th style='{_th}'>عدد الحركات</th><th style='{_th}'>إجمالي المبلغ (ج.م)</th></tr></thead><tbody>{_rows}</tbody></table></div>", unsafe_allow_html=True)
 
     st.markdown('<div class="sec-title">📋 البيانات التفصيلية</div>', unsafe_allow_html=True)
     display_df = final_df.copy().rename(columns={'client_code':'كود العميل','client_name':'اسم العميل','branch_name':'الفرع'})
-    drop_cols = [c for c in display_df.columns if c.startswith('_') or c == 'id']
+    drop_cols  = [c for c in display_df.columns if c.startswith('_') or c == 'id']
     display_df = display_df.drop(columns=drop_cols, errors='ignore')
     if 'تاريخ الدفع' in display_df.columns:
         display_df['تاريخ الدفع'] = display_df['تاريخ الدفع'].dt.strftime('%Y-%m-%d')
@@ -1694,10 +1828,14 @@ def reports_page():
     show_cols = [c for c in show_cols if c in display_df.columns]
     view_df   = display_df[show_cols]
     col_config = {
-        'الفرع':st.column_config.TextColumn('الفرع',width=110),'كود العميل':st.column_config.TextColumn('كود العميل',width=85),
-        'اسم العميل':st.column_config.TextColumn('اسم العميل',width=130),'رقم المرجع':st.column_config.TextColumn('رقم المرجع',width=120),
-        'تاريخ الدفع':st.column_config.TextColumn('تاريخ الدفع',width=90),'وقت الدفع':st.column_config.TextColumn('وقت الدفع',width=75),
-        'المبلغ':st.column_config.NumberColumn('المبلغ',width=85,format='%.2f'),'كود الخدمة':st.column_config.TextColumn('كود الخدمة',width=80),
+        'الفرع':st.column_config.TextColumn('الفرع',width=110),
+        'كود العميل':st.column_config.TextColumn('كود العميل',width=85),
+        'اسم العميل':st.column_config.TextColumn('اسم العميل',width=130),
+        'رقم المرجع':st.column_config.TextColumn('رقم المرجع',width=120),
+        'تاريخ الدفع':st.column_config.TextColumn('تاريخ الدفع',width=90),
+        'وقت الدفع':st.column_config.TextColumn('وقت الدفع',width=75),
+        'المبلغ':st.column_config.NumberColumn('المبلغ',width=85,format='%.2f'),
+        'كود الخدمة':st.column_config.TextColumn('كود الخدمة',width=80),
     }
     st.dataframe(view_df, use_container_width=True, hide_index=True, height=420, column_config=col_config)
 
@@ -1739,11 +1877,10 @@ def outstanding_page():
         if st.button("🏠 الرئيسية"):
             st.query_params.clear(); st.rerun()
     with col_title:
-        st.markdown('<div class="sec-title">📋 الأقساط المستحقة — فوري & Opay</div>',unsafe_allow_html=True)
+        st.markdown('<div class="sec-title">📋 الأقساط المستحقة — فوري & Opay</div>', unsafe_allow_html=True)
 
     is_admin      = user.get('role')=='admin'
     branches_list = user.get('branches',[])
-
     if isinstance(branches_list,str):
         try:    branches_list=json.loads(branches_list)
         except: branches_list=[branches_list]
@@ -1769,7 +1906,7 @@ def outstanding_page():
     else:
         df_acc=df_raw.copy()
 
-    st.markdown('<div class="filter-bar"><div class="filter-bar-title">🔍 أدوات البحث والتصفية</div>',unsafe_allow_html=True)
+    st.markdown('<div class="filter-bar"><div class="filter-bar-title">🔍 أدوات البحث والتصفية</div>', unsafe_allow_html=True)
     fc1,fc2,fc3,fc4=st.columns(4)
 
     with fc1:
@@ -1804,7 +1941,7 @@ def outstanding_page():
         if search_nat and nation_col:
             df_acc=df_acc[df_acc[nation_col].astype(str).str.contains(search_nat,na=False,case=False)]
 
-    st.markdown('</div>',unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
     if df_acc.empty:
         st.warning("⚠️ لا توجد بيانات تطابق معايير البحث"); return
@@ -1821,23 +1958,23 @@ def outstanding_page():
     df_acc['_remaining'] = (df_acc['_inst'] - df_acc['_paid']).clip(lower=0)
 
     def get_status(row):
-        paid = row['_paid']; inst = row['_inst']
-        if inst <= 0:    return "❌ غير مدفوع"
-        if paid >= inst: return "✅ مدفوع بالكامل"
-        elif paid > 0:   return "⚠️ مسدد جزئي"
-        else:            return "❌ غير مدفوع"
+        paid=row['_paid']; inst=row['_inst']
+        if inst<=0:    return "❌ غير مدفوع"
+        if paid>=inst: return "✅ مدفوع بالكامل"
+        elif paid>0:   return "⚠️ مسدد جزئي"
+        else:          return "❌ غير مدفوع"
 
     df_acc['حالة الدفع'] = df_acc.apply(get_status, axis=1)
-    status_order = {"✅ مدفوع بالكامل": 0, "⚠️ مسدد جزئي": 1, "❌ غير مدفوع": 2}
+    status_order = {"✅ مدفوع بالكامل":0,"⚠️ مسدد جزئي":1,"❌ غير مدفوع":2}
     df_acc['_sk'] = df_acc['حالة الدفع'].map(status_order)
     df_acc = df_acc.sort_values('_sk').drop('_sk', axis=1)
 
-    ti = df_acc['_inst'].sum(); tp = df_acc['_paid'].sum(); tr = ti - tp
+    ti=df_acc['_inst'].sum(); tp=df_acc['_paid'].sum(); tr=ti-tp
     df_partial  = df_acc[df_acc['حالة الدفع']=="⚠️ مسدد جزئي"]
     partial_cnt = len(df_partial); partial_paid=df_partial['_paid'].sum(); partial_rem=df_partial['_inst'].sum()-df_partial['_paid'].sum()
     df_unpaid   = df_acc[df_acc['حالة الدفع']=="❌ غير مدفوع"]; unpaid_cnt=len(df_unpaid)
 
-    k1,k2,k3,k4 = st.columns(4)
+    k1,k2,k3,k4=st.columns(4)
     with k1:
         st.markdown(f'''<div class="kpi-card"><div class="kpi-lbl">💰 إجمالي المستحق</div><div class="kpi-val">{ti:,.0f} ج.م</div><div style="font-size:11px;color:#64748b;margin-top:4px">{len(df_acc):,} قسط</div></div>''', unsafe_allow_html=True)
     with k2:
@@ -1856,9 +1993,12 @@ def outstanding_page():
     def build_branch_table(df_data, title_prefix=""):
         rows = []
         for br in sorted(df_data[branch_col].dropna().unique()):
-            df_br = df_data[df_data[branch_col] == br]
-            df_full=df_br[df_br['حالة الدفع']=="✅ مدفوع بالكامل"]; df_part=df_br[df_br['حالة الدفع']=="⚠️ مسدد جزئي"]; df_unp=df_br[df_br['حالة الدفع']=="❌ غير مدفوع"]
-            inst_total=df_br['_inst'].sum(); paid_full=df_full['_paid'].sum(); paid_part=df_part['_paid'].sum(); remaining=inst_total-(paid_full+paid_part)
+            df_br=df_data[df_data[branch_col]==br]
+            df_full=df_br[df_br['حالة الدفع']=="✅ مدفوع بالكامل"]
+            df_part=df_br[df_br['حالة الدفع']=="⚠️ مسدد جزئي"]
+            df_unp=df_br[df_br['حالة الدفع']=="❌ غير مدفوع"]
+            inst_total=df_br['_inst'].sum(); paid_full=df_full['_paid'].sum()
+            paid_part=df_part['_paid'].sum(); remaining=inst_total-(paid_full+paid_part)
             rows.append({'اسم الفرع':br,'عدد الكل':len(df_br),'مسدد بالكامل (عدد)':len(df_full),'مسدد جزئياً (عدد)':len(df_part),'غير مدفوع (عدد)':len(df_unp),'إجمالي المستحق':inst_total,'إجمالي المسدد كلياً':paid_full,'إجمالي المسدد جزئياً':paid_part,'إجمالي المتبقي':remaining})
         if not rows: return
         df_tbl=pd.DataFrame(rows).sort_values('إجمالي المستحق',ascending=False)
@@ -1869,7 +2009,7 @@ def outstanding_page():
         def td_r(val,color='#1e293b',bold=False):
             fw='font-weight:700;' if bold else 'font-weight:500;'
             return f"<td style='padding:10px 14px;text-align:right;border-bottom:1px solid #e2e8f0;color:{color};{fw}'>{val}</td>"
-        def fmt(v): return f"{v:,.2f}"
+        def fmt(v):  return f"{v:,.2f}"
         def fmti(v): return f"{int(v):,}"
         body=""
         for _,r in df_tbl.iterrows():
@@ -1882,13 +2022,13 @@ def outstanding_page():
 
     if len(unique_branches)==1:
         br_name=unique_branches[0]
-        st.markdown(f"<div style='background:#eff6ff;border-right:5px solid #2563eb;border-radius:10px;padding:10px 16px;margin-bottom:10px;font-size:15px;font-weight:700;color:#1e3a8a;'>📍 ملخص فرع: {br_name}</div>",unsafe_allow_html=True)
+        st.markdown(f"<div style='background:#eff6ff;border-right:5px solid #2563eb;border-radius:10px;padding:10px 16px;margin-bottom:10px;font-size:15px;font-weight:700;color:#1e3a8a;'>📍 ملخص فرع: {br_name}</div>", unsafe_allow_html=True)
         build_branch_table(df_acc)
     else:
         st.markdown('<div class="sec-title">🏢 ملخص إجمالي الفروع</div>', unsafe_allow_html=True)
         build_branch_table(df_acc)
 
-    st.markdown('<div class="sec-title">📋 جدول الأقساط المستحقة</div>',unsafe_allow_html=True)
+    st.markdown('<div class="sec-title">📋 جدول الأقساط المستحقة</div>', unsafe_allow_html=True)
     col_map=[('حالة الدفع','📊 حالة الدفع'),(branch_col,'🏢 اسم الفرع'),(client_col,'👤 اسم العميل'),(nation_col,'🆔 الرقم القومي'),('inst_mat_date','📅 تاريخ الاستحقاق'),(inst_col,'💰 قيمة القسط'),(fawry_col,'💳 مبلغ فوري'),(opay_col,'📱 مبلغ Opay'),(officer_col,'👨‍💼 المسؤول'),('loan_number','🔢 رقم القرض'),('inst_status','📌 حالة القسط')]
     dcols=[]; dnames=[]
     for col,name in col_map:
@@ -1945,7 +2085,7 @@ def outstanding_page():
             except Exception as e:
                 st.warning(f"تعذر عرض ملخص المسؤولين: {e}")
 
-    st.markdown('<div class="sec-title">📥 تحميل التقرير</div>',unsafe_allow_html=True)
+    st.markdown('<div class="sec-title">📥 تحميل التقرير</div>', unsafe_allow_html=True)
     xls=generate_outstanding_excel(df_acc)
     st.download_button("📊 تحميل Excel ملون",data=xls,
         file_name=f"الاقساط_المستحقة_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
@@ -1989,9 +2129,9 @@ def main_app():
             del st.session_state['user']
             st.rerun()
 
-    user_id = user.get('id')
+    user_id      = user.get('id')
     unread_count = count_unread_notifications(user_id)
-    
+
     if unread_count > 0:
         st.warning(f"🔔 لديك {unread_count} إشعار غير مقروء في نظام شكاوى العملاء")
 
@@ -2003,62 +2143,50 @@ def main_app():
     </div>
     """, unsafe_allow_html=True)
 
-    # ============================================================
-    # استخدام st.expander و st.button فقط - بدون HTML معقد
-    # ============================================================
-    
+    # داشبورد HTML (يعمل في المتصفح)
+    dashboard_html = f'''
+    <div class="dashboard-grid">
+        <div class="dashboard-card" onclick="window.location.href='?page=reports'">
+            <div class="card-icon">💳</div>
+            <div class="card-title">سداد فوري &amp; Opay</div>
+            <div class="card-desc">عرض وتحليل بيانات السدادات — تقارير دقيقة ومتنوعة مع تصفيات متقدمة وإحصائيات يومية</div>
+            <span class="card-badge">✅ متاح الآن</span>
+        </div>
+        <div class="dashboard-card" onclick="window.location.href='?page=installments'">
+            <div class="card-icon">📋</div>
+            <div class="card-title">الأقساط المستحقة</div>
+            <div class="card-desc">متابعة الأقساط المستحقة مع بيانات الدفع من فوري و Opay وتحليل المديونيات</div>
+            <span class="card-badge">✅ متاح الآن</span>
+        </div>
+        <div class="dashboard-card" onclick="window.location.href='?page=complaints'">
+            {"<div class='notif-badge-card'>🔔 " + str(unread_count) + "</div>" if unread_count > 0 else ""}
+            <div class="card-icon">📝</div>
+            <div class="card-title">شكاوى العملاء</div>
+            <div class="card-desc">تسجيل ومتابعة شكاوى العملاء — إدخال وتعديل وموافقة إدارية مع نظام إشعارات متكامل</div>
+            <span class="card-badge">✅ متاح الآن</span>
+        </div>
+    </div>
+    '''
+    st.markdown(dashboard_html, unsafe_allow_html=True)
+
+    # أزرار احتياطية (تشتغل في كل بيئة)
     st.markdown("---")
-    
-    # الكارت الأول - سداد فوري
-    with st.container():
-        col1, col2 = st.columns([1, 4])
-        with col1:
-            st.markdown("# 💳")
-        with col2:
-            st.markdown("### سداد فوري & Opay")
-            st.caption("عرض وتحليل بيانات السدادات — تقارير دقيقة ومتنوعة")
-        if st.button("🔓 فتح سداد فوري", key="btn_reports", use_container_width=True):
-            st.query_params["page"] = "reports"
-            st.rerun()
-    st.markdown("---")
-    
-    # الكارت الثاني - الأقساط المستحقة
-    with st.container():
-        col1, col2 = st.columns([1, 4])
-        with col1:
-            st.markdown("# 📋")
-        with col2:
-            st.markdown("### الأقساط المستحقة")
-            st.caption("متابعة الأقساط المستحقة مع بيانات الدفع من فوري و Opay")
-        if st.button("🔓 فتح الأقساط المستحقة", key="btn_installments", use_container_width=True):
-            st.query_params["page"] = "installments"
-            st.rerun()
-    st.markdown("---")
-    
-    # الكارت الثالث - شكاوى العملاء (مع إشعار)
-    with st.container():
-        col1, col2 = st.columns([1, 4])
-        with col1:
-            if unread_count > 0:
-                st.markdown("# 📝 🔴")
-            else:
-                st.markdown("# 📝")
-        with col2:
-            if unread_count > 0:
-                st.markdown("### شكاوى العملاء ⚠️")
-                st.caption(f"تسجيل ومتابعة شكاوى العملاء — إدخال وتعديل وموافقة إدارية **(لديك {unread_count} إشعار جديد)**")
-            else:
-                st.markdown("### شكاوى العملاء")
-                st.caption("تسجيل ومتابعة شكاوى العملاء — إدخال وتعديل وموافقة إدارية")
-        if st.button("🔓 فتح شكاوى العملاء", key="btn_complaints", use_container_width=True):
-            st.query_params["page"] = "complaints"
-            st.rerun()
-    st.markdown("---")
+    col_a, col_b, col_c = st.columns(3)
+    with col_a:
+        if st.button("💳 سداد فوري", use_container_width=True):
+            st.query_params["page"] = "reports"; st.rerun()
+    with col_b:
+        if st.button("📋 الأقساط المستحقة", use_container_width=True):
+            st.query_params["page"] = "installments"; st.rerun()
+    with col_c:
+        btn_text = f"📝 شكاوى العملاء {'🔔' + str(unread_count) if unread_count > 0 else ''}"
+        if st.button(btn_text, use_container_width=True):
+            st.query_params["page"] = "complaints"; st.rerun()
 
     st.markdown("""
     <div style="text-align:center;margin-top:40px;padding:20px;
                 color:#94a3b8;font-size:12px;border-top:1px solid #e2e8f0;">
-        نظام كاريتاس للتقارير © 2025
+        نظام كاريتاس للتقارير © 2025 | تصميم متكامل لإدارة الشكاوى والتقارير المالية
     </div>
     """, unsafe_allow_html=True)
 
