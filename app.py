@@ -1081,7 +1081,7 @@ def show_list_tab(user, is_admin, user_branches):
       <th style='padding:11px 12px;color:#fff;text-align:center;white-space:nowrap;'>طريقة الاستقبال</th>
       <th style='padding:11px 12px;color:#fff;text-align:center;white-space:nowrap;'>موقف الشكوى</th>
       <th style='padding:11px 12px;color:#fff;text-align:center;white-space:nowrap;'>المدخل</th>
-     </tr></thead><tbody>
+     <tr></thead><tbody>
     """
     for i, row in filtered.iterrows():
         bg = "#f8fafc" if i % 2 == 0 else "#ffffff"
@@ -1174,8 +1174,16 @@ def show_list_tab(user, is_admin, user_branches):
 
             ec1, ec2 = st.columns(2)
             with ec1:
+                # ✅ إصلاح الخطأ: معالجة القيمة None أو NaT
                 curr_notif = sel.get('notification_date')
-                notif_val = pd.to_datetime(curr_notif).date() if curr_notif else datetime.now().date()
+                if curr_notif is None or pd.isna(curr_notif):
+                    # إذا كانت القيمة None أو NaT، استخدم تاريخ اليوم كقيمة افتراضية
+                    notif_val = datetime.now().date()
+                else:
+                    try:
+                        notif_val = pd.to_datetime(curr_notif).date()
+                    except:
+                        notif_val = datetime.now().date()
                 new_notif = st.date_input("📅 تاريخ إبلاغ العميل بنتيجة الشكوى", value=notif_val)
             with ec2:
                 curr_resp = sel.get('response_method') or RESP_OPTS[0]
@@ -1240,7 +1248,6 @@ def show_list_tab(user, is_admin, user_branches):
                         st.success("✅ تم إرسال طلب التعديل — في انتظار موافقة الإدارة.")
                     else:
                         st.error(f"❌ خطأ: {result}")
-
 
 # ── تبويب 3: طلبات التعديل ───────────────────────────────────────
 def show_edit_requests_tab(user, is_admin):
