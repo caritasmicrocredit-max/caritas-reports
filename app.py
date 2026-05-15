@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 from supabase import create_client
 from datetime import datetime
 import io
@@ -48,7 +49,7 @@ html, body, .main, .block-container { direction: rtl; }
 .sys-header-sub   { color:#93c5fd; font-size:12px; margin-top:2px; }
 .sys-header-user  { text-align:left; color:#bfdbfe; font-size:13px; line-height:1.7; }
 
-/* ======= كروت البرامج — CSS Grid بدل st.columns ======= */
+/* ======= كروت البرامج ======= */
 .prog-cards-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -195,17 +196,6 @@ html, body, .main, .block-container { direction: rtl; }
     top:10px;
     left:14px;
 }
-
-/* ======= بطاقة تفاصيل شكوى ======= */
-.complaint-detail-card {
-    background:#f8fafc;
-    border-radius:14px;
-    padding:20px 22px;
-    margin-bottom:16px;
-    border:1.5px solid #e2e8f0;
-}
-.complaint-field-label { font-size:11px; color:#64748b; font-weight:600; margin-bottom:2px; }
-.complaint-field-val   { font-size:13px; color:#1e293b; font-weight:700; }
 
 /* ======= موبايل ======= */
 @media (max-width:640px) {
@@ -638,9 +628,23 @@ def generate_outstanding_excel(df, title="تقرير الأقساط المستح
     ws.freeze_panes="A3"
     buf=io.BytesIO(); wb.save(buf); return buf.getvalue()
 
+
 # ===================================================================
 # ===================== دوال شكاوى العملاء ========================
 # ===================================================================
+
+def clean_json_value(value):
+    """تحويل NaN و Infinity إلى None أو قيم صالحة لـ JSON"""
+    if value is None:
+        return None
+    if isinstance(value, float):
+        if np.isnan(value) or np.isinf(value):
+            return None
+    if isinstance(value, dict):
+        return {k: clean_json_value(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [clean_json_value(v) for v in value]
+    return value
 
 def generate_complaint_number():
     try:
@@ -715,13 +719,16 @@ def create_complaint_notification(user_id, title, message, notif_type,
 
 def submit_edit_request_db(complaint_id, complaint_number, branch_name, changes, user):
     try:
+        # تنظيف التغييرات من أي قيم NaN
+        cleaned_changes = clean_json_value(changes)
+        
         data = {
             "complaint_id": str(complaint_id),
             "complaint_number": complaint_number,
             "branch_name": branch_name,
             "requested_by": user.get('id'),
             "requester_name": user.get('full_name'),
-            "changes": changes,
+            "changes": cleaned_changes,
             "status": "pending"
         }
         res = supabase.table("complaint_edit_requests").insert(data).execute()
@@ -754,6 +761,10 @@ def fetch_edit_requests_db(is_admin=False, user_id=None, status_filter=None):
 def process_edit_request_db(request_id, complaint_id, changes, action,
                               admin_user, admin_note, requester_id):
     try:
+        # تنظيف admin_note من NaN
+        if admin_note and pd.isna(admin_note):
+            admin_note = ""
+        
         supabase.table("complaint_edit_requests").update({
             "status": action,
             "reviewed_by": admin_user.get('id'),
@@ -765,8 +776,12 @@ def process_edit_request_db(request_id, complaint_id, changes, action,
         if action == "approved":
             update_data = {"updated_at": datetime.now().isoformat()}
             for field, vals in changes.items():
-                if field != "_note":
-                    update_data[field] = vals.get('new')
+                if field != "_note" and isinstance(vals, dict):
+                    new_val = vals.get('new')
+                    # تنظيف القيمة الجديدة من NaN
+                    if pd.isna(new_val):
+                        new_val = None
+                    update_data[field] = new_val
             supabase.table("customer_complaints").update(update_data)\
                 .eq("id", str(complaint_id)).execute()
             create_complaint_notification(
@@ -1174,10 +1189,9 @@ def show_list_tab(user, is_admin, user_branches):
 
             ec1, ec2 = st.columns(2)
             with ec1:
-                # ✅ إصلاح الخطأ: معالجة القيمة None أو NaT
+                # معالجة القيمة None أو NaT
                 curr_notif = sel.get('notification_date')
                 if curr_notif is None or pd.isna(curr_notif):
-                    # إذا كانت القيمة None أو NaT، استخدم تاريخ اليوم كقيمة افتراضية
                     notif_val = datetime.now().date()
                 else:
                     try:
@@ -1215,15 +1229,15 @@ def show_list_tab(user, is_admin, user_branches):
                 old_n = str(sel.get('notification_date') or "")
                 new_n = new_notif.isoformat()
                 if old_n != new_n:
-                    changes['notification_date'] = {"old": old_n, "new": new_n, "label": "تاريخ إبلاغ العميل"}
+                    changes['notification_date'] = {"old": old_n if old_n != "None" else "", "new": new_n, "label": "تاريخ إبلاغ العميل"}
 
                 old_r = sel.get('response_method') or ""
                 if old_r != new_resp:
-                    changes['response_method'] = {"old": old_r, "new": new_resp, "label": "طريقة الرد على الشاكي"}
+                    changes['response_method'] = {"old": old_r if old_r != "None" else "", "new": new_resp, "label": "طريقة الرد على الشاكي"}
 
                 old_i = sel.get('investigation_summary') or ""
                 if old_i != new_inv.strip():
-                    changes['investigation_summary'] = {"old": old_i, "new": new_inv.strip(), "label": "موجز نتيجة الفحص"}
+                    changes['investigation_summary'] = {"old": old_i, "new": new_inv.strip() or "", "label": "موجز نتيجة الفحص"}
 
                 old_s = sel.get('final_status') or ""
                 if old_s != new_status:
@@ -1232,7 +1246,7 @@ def show_list_tab(user, is_admin, user_branches):
                 if new_status == "مرفوض":
                     old_rej = sel.get('rejection_justification') or ""
                     if old_rej != new_rej.strip():
-                        changes['rejection_justification'] = {"old": old_rej, "new": new_rej.strip(), "label": "مبررات الرفض"}
+                        changes['rejection_justification'] = {"old": old_rej, "new": new_rej.strip() or "", "label": "مبررات الرفض"}
 
                 if not changes:
                     st.warning("⚠️ لم تُجرِ أي تغييرات!")
@@ -1248,6 +1262,7 @@ def show_list_tab(user, is_admin, user_branches):
                         st.success("✅ تم إرسال طلب التعديل — في انتظار موافقة الإدارة.")
                     else:
                         st.error(f"❌ خطأ: {result}")
+
 
 # ── تبويب 3: طلبات التعديل ───────────────────────────────────────
 def show_edit_requests_tab(user, is_admin):
@@ -1310,7 +1325,7 @@ def show_edit_requests_tab(user, is_admin):
                 old_v = vals.get('old', '—') or '—'
                 new_v = vals.get('new', '—') or '—'
                 chg_rows += (
-                    f"<table>"
+                    f"<tr>"
                     f"<td style='padding:8px 12px;border-bottom:1px solid #e2e8f0;font-weight:600;color:#475569;'>{label}</td>"
                     f"<td style='padding:8px 12px;border-bottom:1px solid #e2e8f0;color:#dc2626;text-decoration:line-through;'>{old_v}</td>"
                     f"<td style='padding:8px 12px;border-bottom:1px solid #e2e8f0;color:#059669;font-weight:700;'>{new_v}</td>"
@@ -1590,7 +1605,7 @@ def reports_page():
         th="padding:12px 14px;text-align:center;color:#fff;font-size:13px;font-weight:700;white-space:nowrap;"
         legend_html=" &nbsp; ".join([f"<span style='background:{code_color_map_html[c][0]};color:{code_color_map_html[c][1]};padding:3px 10px;border-radius:10px;font-size:12px;font-weight:700;'>{c}</span>" for c in all_codes])
         st.markdown(f"<div style='margin-bottom:10px;'>🎨 <strong>دليل الألوان:</strong> &nbsp; {legend_html}</div>", unsafe_allow_html=True)
-        st.markdown(f"<div style='overflow-x:auto;'><table style='width:100%;border-collapse:collapse;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 4px 20px rgba(30,58,138,0.12);font-size:13px;'><thead><tr style='background:#1e3a8a;'><th style='{th}'>التاريخ</th><th style='{th}'>كود الخدمة</th><th style='{th}'>عدد الحركات</th><th style='{th}'>إجمالي المبلغ (ج.م)</th><tr></thead><tbody>{rows_html}</tbody></table></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='overflow-x:auto;'><table style='width:100%;border-collapse:collapse;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 4px 20px rgba(30,58,138,0.12);font-size:13px;'><thead><tr style='background:#1e3a8a;'><th style='{th}'>التاريخ</th><th style='{th}'>كود الخدمة</th><th style='{th}'>عدد الحركات</th><th style='{th}'>إجمالي المبلغ (ج.م)</th></tr></thead><tbody>{rows_html}</tbody></table></div>", unsafe_allow_html=True)
 
     with st.expander("🏢 ملخص الفروع اليومي", expanded=False):
         _CODE_COLORS_HTML=["#dbeafe","#dcfce7","#fef9c3","#fce7f3","#ede9fe","#ffedd5","#cffafe","#fee2e2"]
@@ -1624,11 +1639,11 @@ def reports_page():
                     bg,fg=_code_color_map[code]; cnt=len(df_dc); amt=df_dc['المبلغ'].sum()
                     br_cell=(f"<td rowspan='{br_rowspan}' style='padding:10px 12px;text-align:center;border-bottom:2px solid #1e3a8a;border-left:1px solid #e2e8f0;font-weight:800;color:#fff;vertical-align:middle;background:linear-gradient(180deg,#1e3a8a,#2563eb);font-size:12px;writing-mode:vertical-rl;'>{br}</td>") if (first_day_in_br and first_code_in_day) else ""
                     day_cell=(f"<td rowspan='{day_rowspan}' style='padding:9px 10px;text-align:center;border-bottom:1px solid #cbd5e1;font-weight:700;color:#1e3a8a;vertical-align:middle;background:#f8fafc;font-size:12px;white-space:nowrap;'>{d}</td>") if first_code_in_day else ""
-                    _rows+=(f"<table>"+br_cell+day_cell+f"<td style='padding:8px 10px;text-align:center;border-bottom:1px solid #e2e8f0;background:{bg};color:{fg};font-weight:700;font-size:11px;'>{code}</td><td style='padding:8px 10px;text-align:center;border-bottom:1px solid #e2e8f0;background:{bg};color:{fg};font-weight:700;'>{cnt:,}</td><td style='padding:8px 10px;text-align:center;border-bottom:1px solid #e2e8f0;background:{bg};color:{fg};font-weight:700;'>{amt:,.2f}</td></tr>")
+                    _rows+=(f"<tr>"+br_cell+day_cell+f"<td style='padding:8px 10px;text-align:center;border-bottom:1px solid #e2e8f0;background:{bg};color:{fg};font-weight:700;font-size:11px;'>{code}</td><td style='padding:8px 10px;text-align:center;border-bottom:1px solid #e2e8f0;background:{bg};color:{fg};font-weight:700;'>{cnt:,}</td><td style='padding:8px 10px;text-align:center;border-bottom:1px solid #e2e8f0;background:{bg};color:{fg};font-weight:700;'>{amt:,.2f}</td></tr>")
                     first_code_in_day=False; first_day_in_br=False
                 _rows+=(f"<tr style='background:#0f172a;'><td style='padding:9px 10px;text-align:center;color:#93c5fd;font-weight:800;border-bottom:1.5px solid #334155;font-size:11px;'>✦ {d}</td><td style='padding:9px 10px;text-align:center;color:#bfdbfe;font-weight:800;border-bottom:1.5px solid #334155;font-size:11px;'>الكل</td><td style='padding:9px 10px;text-align:center;color:#fff;font-weight:800;border-bottom:1.5px solid #334155;'>{day_cnt:,}</td><td style='padding:9px 10px;text-align:center;color:#fde68a;font-weight:800;border-bottom:1.5px solid #334155;'>{day_amt:,.2f}</td></tr>")
         _rows+=(f"<tr style='background:#1e3a8a;'><td colspan='2' style='padding:12px;text-align:center;color:#fff;font-weight:800;font-size:13px;'>الإجمالي الكلي</td><td style='padding:12px;text-align:center;color:#bfdbfe;font-weight:800;'>—</td><td style='padding:12px;text-align:center;color:#fff;font-weight:800;'>{len(final_df):,}</td><td style='padding:12px;text-align:center;color:#fde68a;font-weight:800;'>{final_df['المبلغ'].sum():,.2f}</td></tr>")
-        st.markdown(f"<div style='overflow-x:auto;'><table style='width:100%;border-collapse:collapse;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 4px 20px rgba(30,58,138,0.12);font-size:12px;'><thead><tr style='background:#1e3a8a;'><th style='{_th_r}'>الفرع</th><th style='{_th}'>التاريخ</th><th style='{_th}'>كود الخدمة</th><th style='{_th}'>عدد الحركات</th><th style='{_th}'>إجمالي المبلغ (ج.م)</th></tr></thead><tbody>{_rows}</tbody></table></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='overflow-x:auto;'><table style='width:100%;border-collapse:collapse;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 4px 20px rgba(30,58,138,0.12);font-size:12px;'><thead><tr style='background:#1e3a8a;'><th style='{_th_r}'>الفرع</th><th style='{_th}'>التاريخ</th><th style='{_th}'>كود الخدمة</th><th style='{_th}'>عدد الحركات</th><th style='{_th}'>إجمالي المبلغ (ج.م)</th><tr></thead><tbody>{_rows}</tbody></table></div>", unsafe_allow_html=True)
 
     st.markdown('<div class="sec-title">📋 البيانات التفصيلية</div>', unsafe_allow_html=True)
     display_df = final_df.copy().rename(columns={'client_code':'كود العميل','client_name':'اسم العميل','branch_name':'الفرع'})
@@ -1899,7 +1914,7 @@ def outstanding_page():
 
 
 # ===================================================================
-# ===================== الصفحة الرئيسية (بدون HTML معقد) =================
+# ===================== الصفحة الرئيسية =====================
 # ===================================================================
 
 def main_app():
@@ -1921,8 +1936,7 @@ def main_app():
                 if st.form_submit_button("دخول",use_container_width=True):
                     user=check_login(username,password)
                     if user:
-                        st.session_state['user']=user
-                        st.rerun()
+                        st.session_state['user']=user; st.rerun()
                     else:
                         st.error("❌ خطأ في اسم المستخدم أو كلمة المرور")
         return
@@ -2008,7 +2022,8 @@ def main_app():
         نظام كاريتاس للتقارير © 2025
     </div>
     """, unsafe_allow_html=True)
-        
+
+
 # ===================================================================
 # ===================== تشغيل التطبيق =====================
 # ===================================================================
