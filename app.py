@@ -1891,9 +1891,8 @@ def outstanding_page():
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
-
 # ===================================================================
-# ===================== الصفحة الرئيسية (نسخة Streamlit الأصلية) =================
+# ===================== الصفحة الرئيسية (بدون HTML معقد) =================
 # ===================================================================
 
 def main_app():
@@ -1924,16 +1923,17 @@ def main_app():
     user=st.session_state['user']
     show_header(user)
 
-    _,col_out=st.columns([9,1])
-    with col_out:
-        if st.button("🚪 خروج",use_container_width=True):
+    col_out1, col_out2 = st.columns([8, 2])
+    with col_out2:
+        if st.button("🚪 خروج", use_container_width=True):
             del st.session_state['user']
             st.rerun()
 
     user_id = user.get('id')
     unread_count = count_unread_notifications(user_id)
+    
     if unread_count > 0:
-        st.info(f"🔔 لديك {unread_count} إشعار غير مقروء في نظام شكاوى العملاء")
+        st.warning(f"🔔 لديك {unread_count} إشعار غير مقروء في نظام شكاوى العملاء")
 
     st.markdown(f"""
     <div style="text-align:center;margin:8px 0 28px;">
@@ -1944,60 +1944,56 @@ def main_app():
     """, unsafe_allow_html=True)
 
     # ============================================================
-    # استخدام بطاقات Streamlit الأصلية مع أزرار واضحة
+    # استخدام st.expander و st.button فقط - بدون HTML معقد
     # ============================================================
     
-    col1, col2, col3 = st.columns(3)
+    st.markdown("---")
     
-    with col1:
-        # كارت سداد فوري
-        with st.container():
-            st.markdown("""
-            <div style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);
-                        border-radius:15px;padding:25px 15px;text-align:center;margin:10px 5px;
-                        box-shadow:0 4px 15px rgba(0,0,0,0.1);">
-                <div style="font-size:48px;margin-bottom:10px;">💳</div>
-                <div style="font-size:20px;font-weight:bold;color:white;margin-bottom:10px;">سداد فوري &amp; Opay</div>
-                <div style="font-size:12px;color:#e0e0e0;margin-bottom:20px;">عرض وتحليل بيانات السدادات — تقارير دقيقة ومتنوعة</div>
-            </div>
-            """, unsafe_allow_html=True)
-            if st.button("🔓 فتح سداد فوري", key="btn_reports", use_container_width=True):
-                st.query_params["page"] = "reports"
-                st.rerun()
+    # الكارت الأول - سداد فوري
+    with st.container():
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            st.markdown("# 💳")
+        with col2:
+            st.markdown("### سداد فوري & Opay")
+            st.caption("عرض وتحليل بيانات السدادات — تقارير دقيقة ومتنوعة")
+        if st.button("🔓 فتح سداد فوري", key="btn_reports", use_container_width=True):
+            st.query_params["page"] = "reports"
+            st.rerun()
+    st.markdown("---")
     
-    with col2:
-        # كارت الأقساط المستحقة
-        with st.container():
-            st.markdown("""
-            <div style="background:linear-gradient(135deg,#f093fb 0%,#f5576c 100%);
-                        border-radius:15px;padding:25px 15px;text-align:center;margin:10px 5px;
-                        box-shadow:0 4px 15px rgba(0,0,0,0.1);">
-                <div style="font-size:48px;margin-bottom:10px;">📋</div>
-                <div style="font-size:20px;font-weight:bold;color:white;margin-bottom:10px;">الأقساط المستحقة</div>
-                <div style="font-size:12px;color:#e0e0e0;margin-bottom:20px;">متابعة الأقساط المستحقة مع بيانات الدفع من فوري و Opay</div>
-            </div>
-            """, unsafe_allow_html=True)
-            if st.button("🔓 فتح الأقساط المستحقة", key="btn_installments", use_container_width=True):
-                st.query_params["page"] = "installments"
-                st.rerun()
+    # الكارت الثاني - الأقساط المستحقة
+    with st.container():
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            st.markdown("# 📋")
+        with col2:
+            st.markdown("### الأقساط المستحقة")
+            st.caption("متابعة الأقساط المستحقة مع بيانات الدفع من فوري و Opay")
+        if st.button("🔓 فتح الأقساط المستحقة", key="btn_installments", use_container_width=True):
+            st.query_params["page"] = "installments"
+            st.rerun()
+    st.markdown("---")
     
-    with col3:
-        # كارت شكاوى العملاء
-        with st.container():
-            badge_html = f'<div style="position:absolute;top:-8px;right:-8px;background:#ef4444;color:white;border-radius:50%;padding:5px 10px;font-size:12px;font-weight:bold;">{unread_count}</div>' if unread_count > 0 else ""
-            st.markdown(f"""
-            <div style="background:linear-gradient(135deg,#4facfe 0%,#00f2fe 100%);
-                        border-radius:15px;padding:25px 15px;text-align:center;margin:10px 5px;
-                        box-shadow:0 4px 15px rgba(0,0,0,0.1);position:relative;">
-                {badge_html}
-                <div style="font-size:48px;margin-bottom:10px;">📝</div>
-                <div style="font-size:20px;font-weight:bold;color:white;margin-bottom:10px;">شكاوى العملاء</div>
-                <div style="font-size:12px;color:#e0e0e0;margin-bottom:20px;">تسجيل ومتابعة شكاوى العملاء — إدخال وتعديل وموافقة إدارية</div>
-            </div>
-            """, unsafe_allow_html=True)
-            if st.button("🔓 فتح شكاوى العملاء", key="btn_complaints", use_container_width=True):
-                st.query_params["page"] = "complaints"
-                st.rerun()
+    # الكارت الثالث - شكاوى العملاء (مع إشعار)
+    with st.container():
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            if unread_count > 0:
+                st.markdown("# 📝 🔴")
+            else:
+                st.markdown("# 📝")
+        with col2:
+            if unread_count > 0:
+                st.markdown("### شكاوى العملاء ⚠️")
+                st.caption(f"تسجيل ومتابعة شكاوى العملاء — إدخال وتعديل وموافقة إدارية **(لديك {unread_count} إشعار جديد)**")
+            else:
+                st.markdown("### شكاوى العملاء")
+                st.caption("تسجيل ومتابعة شكاوى العملاء — إدخال وتعديل وموافقة إدارية")
+        if st.button("🔓 فتح شكاوى العملاء", key="btn_complaints", use_container_width=True):
+            st.query_params["page"] = "complaints"
+            st.rerun()
+    st.markdown("---")
 
     st.markdown("""
     <div style="text-align:center;margin-top:40px;padding:20px;
