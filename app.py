@@ -48,15 +48,30 @@ html, body, .main, .block-container { direction: rtl; }
 .sys-header-sub   { color:#93c5fd; font-size:12px; margin-top:2px; }
 .sys-header-user  { text-align:left; color:#bfdbfe; font-size:13px; line-height:1.7; }
 
-/* ======= كروت البرامج ======= */
+/* ======= كروت البرامج — CSS Grid بدل st.columns ======= */
+.prog-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    margin-bottom: 32px;
+}
+@media (max-width: 900px) {
+    .prog-cards-grid { grid-template-columns: 1fr; }
+}
 .prog-card {
     background:#fff;
     border-radius:20px;
-    padding:30px 26px;
+    padding:30px 26px 20px;
     box-shadow:0 4px 24px rgba(30,58,138,0.10);
     border:2px solid #e0e7ff;
     position:relative;
     overflow:hidden;
+    cursor:pointer;
+    transition: box-shadow 0.2s, transform 0.15s;
+}
+.prog-card:hover {
+    box-shadow: 0 8px 32px rgba(30,58,138,0.18);
+    transform: translateY(-2px);
 }
 .prog-card::before {
     content:'';
@@ -74,6 +89,16 @@ html, body, .main, .block-container { direction: rtl; }
     background:linear-gradient(90deg,#2563eb,#06b6d4);
     color:#fff; font-size:11px; font-weight:700;
     padding:4px 14px; border-radius:20px;
+}
+.prog-card-notif-badge {
+    position:absolute;
+    top:12px; left:14px;
+    background:#ef4444;
+    color:#fff;
+    font-size:11px;
+    font-weight:700;
+    padding:2px 10px;
+    border-radius:20px;
 }
 
 /* ======= KPIs ======= */
@@ -186,6 +211,7 @@ html, body, .main, .block-container { direction: rtl; }
 @media (max-width:640px) {
     .sys-header { flex-direction:column; gap:10px; text-align:center; padding:14px 16px; }
     .sys-header-user { text-align:center; }
+    .prog-cards-grid { grid-template-columns: 1fr; }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -617,7 +643,6 @@ def generate_outstanding_excel(df, title="تقرير الأقساط المستح
 # ===================================================================
 
 def generate_complaint_number():
-    """توليد رقم شكوى فريد تسلسلي"""
     try:
         year = datetime.now().year
         res = supabase.table("customer_complaints")\
@@ -639,7 +664,6 @@ def generate_complaint_number():
         return f"شكوى-{int(time.time())}"
 
 def fetch_all_complaints(is_admin, user_branches):
-    """جلب كل الشكاوى بحسب الصلاحيات"""
     try:
         res = supabase.table("customer_complaints")\
             .select("*").order("submission_date", desc=True).execute()
@@ -654,7 +678,6 @@ def fetch_all_complaints(is_admin, user_branches):
         return pd.DataFrame()
 
 def insert_new_complaint(data, user):
-    """إدراج شكوى جديدة وإشعار الأدمن"""
     try:
         res = supabase.table("customer_complaints").insert(data).execute()
         if res.data:
@@ -671,7 +694,6 @@ def insert_new_complaint(data, user):
         return False, str(e)
 
 def get_admin_user_ids():
-    """جلب معرفات الأدمن"""
     try:
         res = supabase.table("app_users").select("id").eq("role", "admin").execute()
         return [r['id'] for r in (res.data or [])]
@@ -680,7 +702,6 @@ def get_admin_user_ids():
 
 def create_complaint_notification(user_id, title, message, notif_type,
                                    complaint_id=None, edit_req_id=None):
-    """إنشاء إشعار"""
     try:
         data = {"user_id": user_id, "title": title, "message": message,
                 "notification_type": notif_type, "is_read": False}
@@ -693,7 +714,6 @@ def create_complaint_notification(user_id, title, message, notif_type,
         pass
 
 def submit_edit_request_db(complaint_id, complaint_number, branch_name, changes, user):
-    """تقديم طلب تعديل"""
     try:
         data = {
             "complaint_id": str(complaint_id),
@@ -719,7 +739,6 @@ def submit_edit_request_db(complaint_id, complaint_number, branch_name, changes,
         return False, str(e)
 
 def fetch_edit_requests_db(is_admin=False, user_id=None, status_filter=None):
-    """جلب طلبات التعديل"""
     try:
         q = supabase.table("complaint_edit_requests")\
             .select("*").order("requested_at", desc=True)
@@ -734,7 +753,6 @@ def fetch_edit_requests_db(is_admin=False, user_id=None, status_filter=None):
 
 def process_edit_request_db(request_id, complaint_id, changes, action,
                               admin_user, admin_note, requester_id):
-    """معالجة طلب التعديل: موافقة أو رفض"""
     try:
         supabase.table("complaint_edit_requests").update({
             "status": action,
@@ -767,7 +785,6 @@ def process_edit_request_db(request_id, complaint_id, changes, action,
         return False
 
 def fetch_notifications_db(user_id):
-    """جلب إشعارات المستخدم"""
     try:
         res = supabase.table("complaint_notifications")\
             .select("*").eq("user_id", user_id)\
@@ -777,7 +794,6 @@ def fetch_notifications_db(user_id):
         return pd.DataFrame()
 
 def count_unread_notifications(user_id):
-    """عد الإشعارات غير المقروءة"""
     try:
         res = supabase.table("complaint_notifications")\
             .select("id").eq("user_id", user_id).eq("is_read", False).execute()
@@ -786,7 +802,6 @@ def count_unread_notifications(user_id):
         return 0
 
 def mark_all_notifications_read(user_id):
-    """تحديد كل الإشعارات كمقروءة"""
     try:
         supabase.table("complaint_notifications")\
             .update({"is_read": True})\
@@ -795,7 +810,6 @@ def mark_all_notifications_read(user_id):
         pass
 
 def generate_complaints_excel(df):
-    """تصدير سجل الشكاوى Excel"""
     wb = Workbook(); ws = wb.active; ws.title = "سجل الشكاوى"
     ws.sheet_view.rightToLeft = True
 
@@ -840,7 +854,6 @@ def generate_complaints_excel(df):
         c.border = thin_border()
     ws.row_dimensions[2].height = 28
 
-    status_ci = db_cols.index("final_status") + 1
     for ri, (_, row) in enumerate(df.iterrows(), 3):
         status_val = str(row.get("final_status", ""))
         bg_h, fg_h = STATUS_COLORS.get(status_val, ("F8FAFC", "1E293B"))
@@ -935,15 +948,17 @@ def show_entry_tab(user, is_admin, user_branches):
         with c2:
             sub_date = st.date_input("📅 تاريخ تقديم الشكوى *", value=datetime.now().date())
         with c3:
+            # ✅ إصلاح: "هاتف" → "تليفونيا"
             reception = st.selectbox("📞 طريقة استقبال الشكوى *",
-                ["هاتف", "وسائل تواصل اجتماعي", "بريد الكتروني", "حضور شخصي", "خطاب"])
+                ["تليفونيا", "وسائل تواصل اجتماعي", "بريد الكتروني", "حضور شخصي", "خطاب"])
 
         c4, c5, c6 = st.columns(3)
         with c4:
             comp_name = st.text_input("👤 اسم مقدم الشكوى *")
         with c5:
+            # ✅ إصلاح: إضافة "عميل" و"ضامن" و"عمل" وإبقاء الباقي
             comp_role = st.selectbox("🔖 صفة مقدم الشكوى",
-                ["عميل", "ذو صلة بعميل", "أخرى"])
+                ["عميل", "ضامن", "عمل", "ذو صلة بعميل", "أخرى"])
         with c6:
             card_num = st.text_input("🪪 رقم بطاقة العميل")
 
@@ -1011,7 +1026,6 @@ def show_list_tab(user, is_admin, user_branches):
         st.info("📭 لا توجد شكاوى مسجلة حتى الآن")
         return
 
-    # ── فلاتر ──
     st.markdown('<div class="filter-bar"><div class="filter-bar-title">🔍 أدوات البحث والتصفية</div>', unsafe_allow_html=True)
     fc1, fc2, fc3, fc4 = st.columns(4)
     with fc1:
@@ -1043,7 +1057,6 @@ def show_list_tab(user, is_admin, user_branches):
     if filtered.empty:
         st.warning("⚠️ لا توجد نتائج تطابق معايير البحث"); return
 
-    # ── KPIs ──
     cnt = filtered['final_status'].value_counts()
     k1, k2, k3, k4 = st.columns(4)
     with k1:
@@ -1058,7 +1071,6 @@ def show_list_tab(user, is_admin, user_branches):
         v = cnt.get('مرفوض', 0)
         st.markdown(f'<div class="kpi-card" style="border-top-color:#dc2626"><div class="kpi-lbl">❌ مرفوض</div><div class="kpi-val" style="color:#dc2626">{v:,}</div></div>', unsafe_allow_html=True)
 
-    # ── جدول ملخص ──
     tbl_html = """
     <div style='overflow-x:auto;margin-bottom:20px;'>
     <table style='width:100%;border-collapse:collapse;background:#fff;border-radius:14px;
@@ -1096,7 +1108,6 @@ def show_list_tab(user, is_admin, user_branches):
     tbl_html += "</tbody></table></div>"
     st.markdown(tbl_html, unsafe_allow_html=True)
 
-    # ── تنزيل ──
     col_dl1, col_dl2 = st.columns([3, 1])
     with col_dl2:
         xls_data = generate_complaints_excel(filtered)
@@ -1108,7 +1119,6 @@ def show_list_tab(user, is_admin, user_branches):
             use_container_width=True
         )
 
-    # ── عرض التفاصيل وطلب التعديل ──
     st.markdown('<div class="sec-title">🔍 عرض وتعديل شكوى</div>', unsafe_allow_html=True)
 
     opts = {
@@ -1122,7 +1132,6 @@ def show_list_tab(user, is_admin, user_branches):
 
     sel = opts[sel_lbl]
 
-    # تفاصيل
     with st.expander("📋 تفاصيل الشكوى الكاملة", expanded=True):
         d1, d2, d3 = st.columns(3)
         with d1:
@@ -1156,14 +1165,13 @@ def show_list_tab(user, is_admin, user_branches):
             st.markdown("**⚠️ مبررات الرفض:**")
             st.error(sel['rejection_justification'])
 
-    # ── نموذج طلب التعديل ──
     with st.expander("✏️ طلب تعديل هذه الشكوى", expanded=False):
         st.info(
             "💡 يمكنك تعديل الحقول التالية — سيُرسل الطلب للإدارة وسيتم إشعارك بالنتيجة."
         )
 
         with st.form(f"edit_form_{sel['id'][:8]}"):
-            RESP_OPTS = ["هاتف", "وسائل تواصل اجتماعي", "بريد الكتروني", "خطاب"]
+            RESP_OPTS = ["تليفونيا", "وسائل تواصل اجتماعي", "بريد الكتروني", "خطاب"]
             STATUS_OPTS = ["قيد الدراسة", "مقبول", "مرفوض", "تم الحل جزئياً", "تم الحل"]
 
             ec1, ec2 = st.columns(2)
@@ -1259,7 +1267,6 @@ def show_edit_requests_tab(user, is_admin):
         st.info("📭 لا توجد طلبات تعديل حالياً")
         return
 
-    # عرض الطلبات
     for _, req in df_req.iterrows():
         changes = req.get('changes', {})
         if isinstance(changes, str):
@@ -1290,7 +1297,6 @@ def show_edit_requests_tab(user, is_admin):
         req_time = str(req.get('requested_at',''))[:16].replace('T',' ')
         st.markdown(f"<span style='font-size:11px;color:#64748b;'>🕐 {req_time}</span>", unsafe_allow_html=True)
 
-        # جدول التغييرات
         if changes:
             chg_rows = ""
             for field, vals in changes.items():
@@ -1326,7 +1332,6 @@ def show_edit_requests_tab(user, is_admin):
             rev_time = str(req.get('reviewed_at',''))[:16].replace('T',' ')
             st.markdown(f"<span style='font-size:11px;color:#64748b;'>🔍 راجعه {req.get('reviewed_by_name','—')} في {rev_time}</span>", unsafe_allow_html=True)
 
-        # أزرار الموافقة والرفض (للأدمن فقط على الطلبات المعلّقة)
         if is_admin and req_status == "pending":
             req_id = req.get('id')
             comp_id = req.get('complaint_id')
@@ -1924,7 +1929,6 @@ def main_app():
         if st.button("🚪 خروج",use_container_width=True):
             del st.session_state['user']; st.rerun()
 
-    # إشعار عدد الرسائل غير المقروءة على الصفحة الرئيسية
     user_id = user.get('id')
     unread_count = count_unread_notifications(user_id)
     if unread_count > 0:
@@ -1948,33 +1952,35 @@ def main_app():
     </div>
     """,unsafe_allow_html=True)
 
-    cols=st.columns(len(PROGRAMS))
-    for i,(prog_id,prog) in enumerate(PROGRAMS.items()):
-        with cols[i]:
-            # إضافة شارة الإشعارات على بطاقة الشكاوى
-            badge_html = ""
-            if prog_id == "complaints" and unread_count > 0:
-                badge_html = (
-                    f"<span style='position:absolute;top:12px;left:14px;"
-                    f"background:#ef4444;color:#fff;font-size:11px;font-weight:700;"
-                    f"padding:2px 8px;border-radius:20px;'>🔔 {unread_count}</span>"
-                )
+    # ✅ الإصلاح الرئيسي: بناء الكروت بـ HTML grid خالص بدون st.columns
+    prog_ids = list(PROGRAMS.keys())
+    cards_html = "<div class='prog-cards-grid'>"
+    for prog_id, prog in PROGRAMS.items():
+        badge = ""
+        if prog_id == "complaints" and unread_count > 0:
+            badge = f"<span class='prog-card-notif-badge'>🔔 {unread_count}</span>"
+        cards_html += f"""
+        <div class='prog-card'>
+            {badge}
+            <span class='prog-card-icon'>{prog['icon']}</span>
+            <div class='prog-card-name'>{prog['name']}</div>
+            <div class='prog-card-desc'>{prog['desc']}</div>
+            <span class='prog-card-badge'>✅ متاح الآن</span>
+        </div>
+        """
+    cards_html += "</div>"
+    st.markdown(cards_html, unsafe_allow_html=True)
 
-            st.markdown(f"""
-            <div class="prog-card">
-                {badge_html}
-                <span class="prog-card-icon">{prog['icon']}</span>
-                <div class="prog-card-name">{prog['name']}</div>
-                <div class="prog-card-desc">{prog['desc']}</div>
-                <span class="prog-card-badge">✅ متاح الآن</span>
-            </div>
-            <div style="height:12px"></div>
-            """,unsafe_allow_html=True)
-            if st.button(f"فتح — {prog['name']}",key=f"open_{prog_id}",use_container_width=True):
-                st.query_params["page"]=prog_id; st.rerun()
+    # أزرار الفتح مستقلة تحت الكروت
+    btn_cols = st.columns(len(PROGRAMS))
+    for i, (prog_id, prog) in enumerate(PROGRAMS.items()):
+        with btn_cols[i]:
+            if st.button(f"فتح — {prog['name']}", key=f"open_{prog_id}", use_container_width=True):
+                st.query_params["page"] = prog_id
+                st.rerun()
 
     st.markdown("""
-    <div style="text-align:center;margin-top:60px;padding:20px;
+    <div style="text-align:center;margin-top:40px;padding:20px;
                 color:#94a3b8;font-size:12px;border-top:1px solid #e2e8f0;">
         نظام كاريتاس للتقارير © 2025
     </div>
