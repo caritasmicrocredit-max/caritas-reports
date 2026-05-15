@@ -1899,6 +1899,10 @@ def outstanding_page():
 # ===================== الصفحة الرئيسية (تم إصلاحها) =================
 # ===================================================================
 
+# ===================================================================
+# ===================== الصفحة الرئيسية (الإصدار النهائي المصحح) =================
+# ===================================================================
+
 def main_app():
     if 'user' not in st.session_state:
         st.markdown("""
@@ -1918,7 +1922,8 @@ def main_app():
                 if st.form_submit_button("دخول",use_container_width=True):
                     user=check_login(username,password)
                     if user:
-                        st.session_state['user']=user; st.rerun()
+                        st.session_state['user']=user
+                        st.rerun()
                     else:
                         st.error("❌ خطأ في اسم المستخدم أو كلمة المرور")
         return
@@ -1929,7 +1934,8 @@ def main_app():
     _,col_out=st.columns([9,1])
     with col_out:
         if st.button("🚪 خروج",use_container_width=True):
-            del st.session_state['user']; st.rerun()
+            del st.session_state['user']
+            st.rerun()
 
     user_id = user.get('id')
     unread_count = count_unread_notifications(user_id)
@@ -1954,63 +1960,59 @@ def main_app():
     </div>
     """, unsafe_allow_html=True)
 
-    # ✅ بناء الكروت الثلاثة بشكل صحيح ومنفصل
-    cards_html = "<div class='prog-cards-grid'>"
+    # ============================================================
+    # بناء الكروت الثلاثة بشكل صحيح 100%
+    # ============================================================
     
-    # 1. كارت سداد فوري (بدون شارة إشعارات)
-    cards_html += """
-    <div class='prog-card' onclick="window.location.href='?page=reports'">
-        <span class='prog-card-icon'>💳</span>
-        <div class='prog-card-name'>سداد فوري & Opay</div>
-        <div class='prog-card-desc'>عرض وتحليل بيانات السدادات — تقارير دقيقة ومتنوعة</div>
-        <span class='prog-card-badge'>✅ متاح الآن</span>
+    # شارة الإشعارات للكارت الثالث
+    notif_badge = f"<span class='prog-card-notif-badge'>🔔 {unread_count}</span>" if unread_count > 0 else ""
+    
+    # إنشاء HTML الكامل للكروت
+    cards_html = f'''
+    <div class="prog-cards-grid">
+        <!-- كارت 1: سداد فوري -->
+        <div class="prog-card" onclick="window.location.href='?page=reports'">
+            <span class="prog-card-icon">💳</span>
+            <div class="prog-card-name">سداد فوري &amp; Opay</div>
+            <div class="prog-card-desc">عرض وتحليل بيانات السدادات — تقارير دقيقة ومتنوعة</div>
+            <span class="prog-card-badge">✅ متاح الآن</span>
+        </div>
+        
+        <!-- كارت 2: الأقساط المستحقة -->
+        <div class="prog-card" onclick="window.location.href='?page=installments'">
+            <span class="prog-card-icon">📋</span>
+            <div class="prog-card-name">الأقساط المستحقة</div>
+            <div class="prog-card-desc">متابعة الأقساط المستحقة مع بيانات الدفع من فوري و Opay</div>
+            <span class="prog-card-badge">✅ متاح الآن</span>
+        </div>
+        
+        <!-- كارت 3: شكاوى العملاء مع شارة الإشعارات -->
+        <div class="prog-card" onclick="window.location.href='?page=complaints'">
+            {notif_badge}
+            <span class="prog-card-icon">📝</span>
+            <div class="prog-card-name">شكاوى العملاء</div>
+            <div class="prog-card-desc">تسجيل ومتابعة شكاوى العملاء — إدخال وتعديل وموافقة إدارية</div>
+            <span class="prog-card-badge">✅ متاح الآن</span>
+        </div>
     </div>
-    """
+    '''
     
-    # 2. كارت الأقساط المستحقة (بدون شارة إشعارات)
-    cards_html += """
-    <div class='prog-card' onclick="window.location.href='?page=installments'">
-        <span class='prog-card-icon'>📋</span>
-        <div class='prog-card-name'>الأقساط المستحقة</div>
-        <div class='prog-card-desc'>متابعة الأقساط المستحقة مع بيانات الدفع من فوري و Opay</div>
-        <span class='prog-card-badge'>✅ متاح الآن</span>
-    </div>
-    """
-    
-    # 3. كارت شكاوى العملاء (مع شارة الإشعارات إذا وجدت)
-    notif_badge_html = ""
-    if unread_count > 0:
-        notif_badge_html = f"<span class='prog-card-notif-badge'>🔔 {unread_count}</span>"
-    
-    # نضيف الكارت الثالث مع شارة الإشعارات داخله
-    cards_html += f"""
-    <div class='prog-card' onclick="window.location.href='?page=complaints'">
-        {notif_badge_html}
-        <span class='prog-card-icon'>📝</span>
-        <div class='prog-card-name'>شكاوى العملاء</div>
-        <div class='prog-card-desc'>تسجيل ومتابعة شكاوى العملاء — إدخال وتعديل وموافقة إدارية</div>
-        <span class='prog-card-badge'>✅ متاح الآن</span>
-    </div>
-    """
-    
-    cards_html += "</div>"
-    
-    # عرض الكروت في Streamlit
+    # عرض الكروت
     st.markdown(cards_html, unsafe_allow_html=True)
 
-    # أزرار الفتح الاحتياطية (في حال عدم عمل الضغط على الكارت في بعض البيئات)
+    # أزرار الفتح الاحتياطية
     st.markdown("---")
-    btn_cols = st.columns(3)
-    with btn_cols[0]:
-        if st.button("🚀 فتح سداد فوري", use_container_width=True, key="btn_reports"):
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        if st.button("💳 سداد فوري", use_container_width=True, key="btn_reports"):
             st.query_params["page"] = "reports"
             st.rerun()
-    with btn_cols[1]:
-        if st.button("📊 فتح الأقساط المستحقة", use_container_width=True, key="btn_inst"):
+    with col2:
+        if st.button("📋 الأقساط المستحقة", use_container_width=True, key="btn_installments"):
             st.query_params["page"] = "installments"
             st.rerun()
-    with btn_cols[2]:
-        if st.button("📝 فتح شكاوى العملاء", use_container_width=True, key="btn_complaints"):
+    with col3:
+        if st.button("📝 شكاوى العملاء", use_container_width=True, key="btn_complaints"):
             st.query_params["page"] = "complaints"
             st.rerun()
 
@@ -2020,7 +2022,6 @@ def main_app():
         نظام كاريتاس للتقارير © 2025
     </div>
     """, unsafe_allow_html=True)
-
 # ===================================================================
 # ===================== تشغيل التطبيق =====================
 # ===================================================================
