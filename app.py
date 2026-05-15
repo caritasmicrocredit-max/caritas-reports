@@ -1696,10 +1696,17 @@ def reports_page():
     if v_dates.empty:
         st.info("📭 لا توجد تواريخ متاحة"); return
 
-    st.markdown('<div class="filter-bar"><div class="filter-bar-title">🔍 أدوات البحث والتصفية</div>', unsafe_allow_html=True)
+        st.markdown('<div class="filter-bar"><div class="filter-bar-title">🔍 أدوات البحث والتصفية</div>', unsafe_allow_html=True)
+
+    # تاريخ اليوم + أول الشهر الحالي
+    today = datetime.now().date()
+    first_day_this_month = today.replace(day=1)
+
     fc1, fc2, fc3, fc4 = st.columns(4)
-    with fc1: start_d = st.date_input("📅 من تاريخ", v_dates.min().date(), key="r_from")
-    with fc2: end_d   = st.date_input("📅 إلى تاريخ", v_dates.max().date(), key="r_to")
+    with fc1: 
+        start_d = st.date_input("📅 من تاريخ", first_day_this_month, key="r_from")
+    with fc2: 
+        end_d   = st.date_input("📅 إلى تاريخ", today, key="r_to")
     with fc3:
         all_branches_r = ["الكل"] + sorted(df_acc['branch_name'].dropna().unique().tolist())
         sel_branch = st.selectbox("🏢 الفرع", all_branches_r, key="r_branch")
@@ -2190,7 +2197,7 @@ def main_app():
         if st.button("دخول → سداد فوري", use_container_width=True, type="primary", key="btn_rep"):
             st.query_params["page"] = "reports"
             st.rerun()
-                    
+
     st.markdown("""
     <div style="text-align:center;margin-top:40px;padding:20px;
                 color:#94a3b8;font-size:12px;border-top:1px solid #e2e8f0;">
