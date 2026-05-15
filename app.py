@@ -1893,7 +1893,7 @@ def outstanding_page():
 
 
 # ===================================================================
-# ===================== الصفحة الرئيسية (طريقة Columns المضمونة) =================
+# ===================== الصفحة الرئيسية (نسخة Streamlit الأصلية) =================
 # ===================================================================
 
 def main_app():
@@ -1933,17 +1933,7 @@ def main_app():
     user_id = user.get('id')
     unread_count = count_unread_notifications(user_id)
     if unread_count > 0:
-        st.markdown(
-            f"<div style='background:linear-gradient(90deg,#fef2f2,#fff7ed);"
-            f"border:1.5px solid #ef4444;border-right:5px solid #ef4444;"
-            f"border-radius:12px;padding:12px 20px;margin-bottom:16px;"
-            f"display:flex;align-items:center;gap:12px;'>"
-            f"<span style='font-size:22px;'>🔔</span>"
-            f"<span style='font-weight:700;color:#991b1b;font-size:13px;'>"
-            f"لديك <strong>{unread_count}</strong> إشعار غير مقروء في نظام الشكاوى"
-            f"</span></div>",
-            unsafe_allow_html=True
-        )
+        st.info(f"🔔 لديك {unread_count} إشعار غير مقروء في نظام شكاوى العملاء")
 
     st.markdown(f"""
     <div style="text-align:center;margin:8px 0 28px;">
@@ -1954,61 +1944,60 @@ def main_app():
     """, unsafe_allow_html=True)
 
     # ============================================================
-    # استخدام st.columns بدلاً من HTML Grid (مضمون 100%)
+    # استخدام بطاقات Streamlit الأصلية مع أزرار واضحة
     # ============================================================
     
-    # إنشاء 3 أعمدة متساوية
     col1, col2, col3 = st.columns(3)
     
-    # الكارت الأول - سداد فوري
     with col1:
-        # شارة الإشعارات (فارغة لهذا الكارت)
-        notif_badge_1 = ""
-        st.markdown(f"""
-        <div class='prog-card' onclick="window.location.href='?page=reports'">
-            {notif_badge_1}
-            <span class='prog-card-icon'>💳</span>
-            <div class='prog-card-name'>سداد فوري &amp; Opay</div>
-            <div class='prog-card-desc'>عرض وتحليل بيانات السدادات — تقارير دقيقة ومتنوعة</div>
-            <span class='prog-card-badge'>✅ متاح الآن</span>
-        </div>
-        """, unsafe_allow_html=True)
-        # زر احتياطي تحت الكارت
-        if st.button("فتح 💳", key="btn1", use_container_width=True):
-            st.query_params["page"] = "reports"
-            st.rerun()
+        # كارت سداد فوري
+        with st.container():
+            st.markdown("""
+            <div style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);
+                        border-radius:15px;padding:25px 15px;text-align:center;margin:10px 5px;
+                        box-shadow:0 4px 15px rgba(0,0,0,0.1);">
+                <div style="font-size:48px;margin-bottom:10px;">💳</div>
+                <div style="font-size:20px;font-weight:bold;color:white;margin-bottom:10px;">سداد فوري &amp; Opay</div>
+                <div style="font-size:12px;color:#e0e0e0;margin-bottom:20px;">عرض وتحليل بيانات السدادات — تقارير دقيقة ومتنوعة</div>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button("🔓 فتح سداد فوري", key="btn_reports", use_container_width=True):
+                st.query_params["page"] = "reports"
+                st.rerun()
     
-    # الكارت الثاني - الأقساط المستحقة
     with col2:
-        notif_badge_2 = ""
-        st.markdown(f"""
-        <div class='prog-card' onclick="window.location.href='?page=installments'">
-            {notif_badge_2}
-            <span class='prog-card-icon'>📋</span>
-            <div class='prog-card-name'>الأقساط المستحقة</div>
-            <div class='prog-card-desc'>متابعة الأقساط المستحقة مع بيانات الدفع من فوري و Opay</div>
-            <span class='prog-card-badge'>✅ متاح الآن</span>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.button("فتح 📋", key="btn2", use_container_width=True):
-            st.query_params["page"] = "installments"
-            st.rerun()
+        # كارت الأقساط المستحقة
+        with st.container():
+            st.markdown("""
+            <div style="background:linear-gradient(135deg,#f093fb 0%,#f5576c 100%);
+                        border-radius:15px;padding:25px 15px;text-align:center;margin:10px 5px;
+                        box-shadow:0 4px 15px rgba(0,0,0,0.1);">
+                <div style="font-size:48px;margin-bottom:10px;">📋</div>
+                <div style="font-size:20px;font-weight:bold;color:white;margin-bottom:10px;">الأقساط المستحقة</div>
+                <div style="font-size:12px;color:#e0e0e0;margin-bottom:20px;">متابعة الأقساط المستحقة مع بيانات الدفع من فوري و Opay</div>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button("🔓 فتح الأقساط المستحقة", key="btn_installments", use_container_width=True):
+                st.query_params["page"] = "installments"
+                st.rerun()
     
-    # الكارت الثالث - شكاوى العملاء (مع شارة الإشعارات)
     with col3:
-        notif_badge_3 = f"<span class='prog-card-notif-badge'>🔔 {unread_count}</span>" if unread_count > 0 else ""
-        st.markdown(f"""
-        <div class='prog-card' onclick="window.location.href='?page=complaints'">
-            {notif_badge_3}
-            <span class='prog-card-icon'>📝</span>
-            <div class='prog-card-name'>شكاوى العملاء</div>
-            <div class='prog-card-desc'>تسجيل ومتابعة شكاوى العملاء — إدخال وتعديل وموافقة إدارية</div>
-            <span class='prog-card-badge'>✅ متاح الآن</span>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.button("فتح 📝", key="btn3", use_container_width=True):
-            st.query_params["page"] = "complaints"
-            st.rerun()
+        # كارت شكاوى العملاء
+        with st.container():
+            badge_html = f'<div style="position:absolute;top:-8px;right:-8px;background:#ef4444;color:white;border-radius:50%;padding:5px 10px;font-size:12px;font-weight:bold;">{unread_count}</div>' if unread_count > 0 else ""
+            st.markdown(f"""
+            <div style="background:linear-gradient(135deg,#4facfe 0%,#00f2fe 100%);
+                        border-radius:15px;padding:25px 15px;text-align:center;margin:10px 5px;
+                        box-shadow:0 4px 15px rgba(0,0,0,0.1);position:relative;">
+                {badge_html}
+                <div style="font-size:48px;margin-bottom:10px;">📝</div>
+                <div style="font-size:20px;font-weight:bold;color:white;margin-bottom:10px;">شكاوى العملاء</div>
+                <div style="font-size:12px;color:#e0e0e0;margin-bottom:20px;">تسجيل ومتابعة شكاوى العملاء — إدخال وتعديل وموافقة إدارية</div>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button("🔓 فتح شكاوى العملاء", key="btn_complaints", use_container_width=True):
+                st.query_params["page"] = "complaints"
+                st.rerun()
 
     st.markdown("""
     <div style="text-align:center;margin-top:40px;padding:20px;
@@ -2016,7 +2005,7 @@ def main_app():
         نظام كاريتاس للتقارير © 2025
     </div>
     """, unsafe_allow_html=True)
-    
+        
 # ===================================================================
 # ===================== تشغيل التطبيق =====================
 # ===================================================================
