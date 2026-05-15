@@ -2143,32 +2143,50 @@ def main_app():
     </div>
     """, unsafe_allow_html=True)
 
-    # داشبورد HTML (يعمل في المتصفح)
-    dashboard_html = f'''
-    <div class="dashboard-grid">
-        <div class="dashboard-card" onclick="window.location.href='?page=reports'">
-            <div class="card-icon">💳</div>
-            <div class="card-title">سداد فوري &amp; Opay</div>
-            <div class="card-desc">عرض وتحليل بيانات السدادات — تقارير دقيقة ومتنوعة مع تصفيات متقدمة وإحصائيات يومية</div>
-            <span class="card-badge">✅ متاح الآن</span>
-        </div>
-        <div class="dashboard-card" onclick="window.location.href='?page=installments'">
-            <div class="card-icon">📋</div>
-            <div class="card-title">الأقساط المستحقة</div>
-            <div class="card-desc">متابعة الأقساط المستحقة مع بيانات الدفع من فوري و Opay وتحليل المديونيات</div>
-            <span class="card-badge">✅ متاح الآن</span>
-        </div>
-        <div class="dashboard-card" onclick="window.location.href='?page=complaints'">
-            {"<div class='notif-badge-card'>🔔 " + str(unread_count) + "</div>" if unread_count > 0 else ""}
-            <div class="card-icon">📝</div>
-            <div class="card-title">شكاوى العملاء</div>
-            <div class="card-desc">تسجيل ومتابعة شكاوى العملاء — إدخال وتعديل وموافقة إدارية مع نظام إشعارات متكامل</div>
-            <span class="card-badge">✅ متاح الآن</span>
-        </div>
-    </div>
-    '''
-    st.markdown(dashboard_html, unsafe_allow_html=True)
+    # ===================== داشبورد Streamlit =====================
+    st.markdown('<div class="sec-title">🚀 الخدمات المتاحة</div>', unsafe_allow_html=True)
 
+    col1, col2, col3 = st.columns(3, gap="large")
+
+    with col1:
+        st.markdown("""
+        <div style="text-align:center; padding:20px 10px; background:linear-gradient(135deg, #eff6ff, #dbeafe); 
+                    border-radius:20px; border:1px solid #bfdbfe;">
+            <div style="font-size:52px; margin-bottom:12px;">💳</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button("💳 **سداد فوري & Opay**", use_container_width=True, type="primary"):
+            st.query_params["page"] = "reports"
+            st.rerun()
+
+    with col2:
+        st.markdown("""
+        <div style="text-align:center; padding:20px 10px; background:linear-gradient(135deg, #f0fdf4, #d1fae5); 
+                    border-radius:20px; border:1px solid #a7f3d0;">
+            <div style="font-size:52px; margin-bottom:12px;">📋</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button("📋 **الأقساط المستحقة**", use_container_width=True, type="primary"):
+            st.query_params["page"] = "installments"
+            st.rerun()
+
+    with col3:
+        unread_count = count_unread_notifications(user.get('id')) if 'user' in st.session_state else 0
+        badge = f" 🔔 {unread_count}" if unread_count > 0 else ""
+        
+        st.markdown(f"""
+        <div style="text-align:center; padding:20px 10px; background:linear-gradient(135deg, #fefce8, #fef9c3); 
+                    border-radius:20px; border:1px solid #fde047;">
+            <div style="font-size:52px; margin-bottom:12px;">📝</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button(f"📝 **شكاوى العملاء{badge}**", use_container_width=True, type="primary"):
+            st.query_params["page"] = "complaints"
+            st.rerun()
+            
     # أزرار احتياطية (تشتغل في كل بيئة)
     st.markdown("---")
     col_a, col_b, col_c = st.columns(3)
