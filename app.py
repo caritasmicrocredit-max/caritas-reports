@@ -948,7 +948,6 @@ def show_entry_tab(user, is_admin, user_branches):
         with c2:
             sub_date = st.date_input("📅 تاريخ تقديم الشكوى *", value=datetime.now().date())
         with c3:
-            # ✅ إصلاح: "هاتف" → "تليفونيا"
             reception = st.selectbox("📞 طريقة استقبال الشكوى *",
                 ["تليفونيا", "وسائل تواصل اجتماعي", "بريد الكتروني", "حضور شخصي", "خطاب"])
 
@@ -956,7 +955,6 @@ def show_entry_tab(user, is_admin, user_branches):
         with c4:
             comp_name = st.text_input("👤 اسم مقدم الشكوى *")
         with c5:
-            # ✅ إصلاح: إضافة "عميل" و"ضامن" و"عمل" وإبقاء الباقي
             comp_role = st.selectbox("🔖 صفة مقدم الشكوى",
                 ["عميل", "ضامن", "عمل", "ذو صلة بعميل", "أخرى"])
         with c6:
@@ -1083,7 +1081,7 @@ def show_list_tab(user, is_admin, user_branches):
       <th style='padding:11px 12px;color:#fff;text-align:center;white-space:nowrap;'>طريقة الاستقبال</th>
       <th style='padding:11px 12px;color:#fff;text-align:center;white-space:nowrap;'>موقف الشكوى</th>
       <th style='padding:11px 12px;color:#fff;text-align:center;white-space:nowrap;'>المدخل</th>
-    </tr></thead><tbody>
+     </tr></thead><tbody>
     """
     for i, row in filtered.iterrows():
         bg = "#f8fafc" if i % 2 == 0 else "#ffffff"
@@ -1305,7 +1303,7 @@ def show_edit_requests_tab(user, is_admin):
                 old_v = vals.get('old', '—') or '—'
                 new_v = vals.get('new', '—') or '—'
                 chg_rows += (
-                    f"<tr>"
+                    f"<table>"
                     f"<td style='padding:8px 12px;border-bottom:1px solid #e2e8f0;font-weight:600;color:#475569;'>{label}</td>"
                     f"<td style='padding:8px 12px;border-bottom:1px solid #e2e8f0;color:#dc2626;text-decoration:line-through;'>{old_v}</td>"
                     f"<td style='padding:8px 12px;border-bottom:1px solid #e2e8f0;color:#059669;font-weight:700;'>{new_v}</td>"
@@ -1585,7 +1583,7 @@ def reports_page():
         th="padding:12px 14px;text-align:center;color:#fff;font-size:13px;font-weight:700;white-space:nowrap;"
         legend_html=" &nbsp; ".join([f"<span style='background:{code_color_map_html[c][0]};color:{code_color_map_html[c][1]};padding:3px 10px;border-radius:10px;font-size:12px;font-weight:700;'>{c}</span>" for c in all_codes])
         st.markdown(f"<div style='margin-bottom:10px;'>🎨 <strong>دليل الألوان:</strong> &nbsp; {legend_html}</div>", unsafe_allow_html=True)
-        st.markdown(f"<div style='overflow-x:auto;'><table style='width:100%;border-collapse:collapse;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 4px 20px rgba(30,58,138,0.12);font-size:13px;'><thead><tr style='background:#1e3a8a;'><th style='{th}'>التاريخ</th><th style='{th}'>كود الخدمة</th><th style='{th}'>عدد الحركات</th><th style='{th}'>إجمالي المبلغ (ج.م)</th></tr></thead><tbody>{rows_html}</tbody></table></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='overflow-x:auto;'><table style='width:100%;border-collapse:collapse;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 4px 20px rgba(30,58,138,0.12);font-size:13px;'><thead><tr style='background:#1e3a8a;'><th style='{th}'>التاريخ</th><th style='{th}'>كود الخدمة</th><th style='{th}'>عدد الحركات</th><th style='{th}'>إجمالي المبلغ (ج.م)</th><tr></thead><tbody>{rows_html}</tbody></table></div>", unsafe_allow_html=True)
 
     with st.expander("🏢 ملخص الفروع اليومي", expanded=False):
         _CODE_COLORS_HTML=["#dbeafe","#dcfce7","#fef9c3","#fce7f3","#ede9fe","#ffedd5","#cffafe","#fee2e2"]
@@ -1619,7 +1617,7 @@ def reports_page():
                     bg,fg=_code_color_map[code]; cnt=len(df_dc); amt=df_dc['المبلغ'].sum()
                     br_cell=(f"<td rowspan='{br_rowspan}' style='padding:10px 12px;text-align:center;border-bottom:2px solid #1e3a8a;border-left:1px solid #e2e8f0;font-weight:800;color:#fff;vertical-align:middle;background:linear-gradient(180deg,#1e3a8a,#2563eb);font-size:12px;writing-mode:vertical-rl;'>{br}</td>") if (first_day_in_br and first_code_in_day) else ""
                     day_cell=(f"<td rowspan='{day_rowspan}' style='padding:9px 10px;text-align:center;border-bottom:1px solid #cbd5e1;font-weight:700;color:#1e3a8a;vertical-align:middle;background:#f8fafc;font-size:12px;white-space:nowrap;'>{d}</td>") if first_code_in_day else ""
-                    _rows+=(f"<tr>"+br_cell+day_cell+f"<td style='padding:8px 10px;text-align:center;border-bottom:1px solid #e2e8f0;background:{bg};color:{fg};font-weight:700;font-size:11px;'>{code}</td><td style='padding:8px 10px;text-align:center;border-bottom:1px solid #e2e8f0;background:{bg};color:{fg};font-weight:700;'>{cnt:,}</td><td style='padding:8px 10px;text-align:center;border-bottom:1px solid #e2e8f0;background:{bg};color:{fg};font-weight:700;'>{amt:,.2f}</td></tr>")
+                    _rows+=(f"<table>"+br_cell+day_cell+f"<td style='padding:8px 10px;text-align:center;border-bottom:1px solid #e2e8f0;background:{bg};color:{fg};font-weight:700;font-size:11px;'>{code}</td><td style='padding:8px 10px;text-align:center;border-bottom:1px solid #e2e8f0;background:{bg};color:{fg};font-weight:700;'>{cnt:,}</td><td style='padding:8px 10px;text-align:center;border-bottom:1px solid #e2e8f0;background:{bg};color:{fg};font-weight:700;'>{amt:,.2f}</td></tr>")
                     first_code_in_day=False; first_day_in_br=False
                 _rows+=(f"<tr style='background:#0f172a;'><td style='padding:9px 10px;text-align:center;color:#93c5fd;font-weight:800;border-bottom:1.5px solid #334155;font-size:11px;'>✦ {d}</td><td style='padding:9px 10px;text-align:center;color:#bfdbfe;font-weight:800;border-bottom:1.5px solid #334155;font-size:11px;'>الكل</td><td style='padding:9px 10px;text-align:center;color:#fff;font-weight:800;border-bottom:1.5px solid #334155;'>{day_cnt:,}</td><td style='padding:9px 10px;text-align:center;color:#fde68a;font-weight:800;border-bottom:1.5px solid #334155;'>{day_amt:,.2f}</td></tr>")
         _rows+=(f"<tr style='background:#1e3a8a;'><td colspan='2' style='padding:12px;text-align:center;color:#fff;font-weight:800;font-size:13px;'>الإجمالي الكلي</td><td style='padding:12px;text-align:center;color:#bfdbfe;font-weight:800;'>—</td><td style='padding:12px;text-align:center;color:#fff;font-weight:800;'>{len(final_df):,}</td><td style='padding:12px;text-align:center;color:#fde68a;font-weight:800;'>{final_df['المبلغ'].sum():,.2f}</td></tr>")
@@ -1952,39 +1950,69 @@ def main_app():
     </div>
     """,unsafe_allow_html=True)
 
-    # ✅ الإصلاح الرئيسي: بناء الكروت بـ HTML grid خالص بدون st.columns
-    prog_ids = list(PROGRAMS.keys())
+    # ✅ بناء الكروت باستخدام HTML GRID مباشرة بدون st.columns
     cards_html = "<div class='prog-cards-grid'>"
-    for prog_id, prog in PROGRAMS.items():
-        badge = ""
-        if prog_id == "complaints" and unread_count > 0:
-            badge = f"<span class='prog-card-notif-badge'>🔔 {unread_count}</span>"
-        cards_html += f"""
-        <div class='prog-card'>
-            {badge}
-            <span class='prog-card-icon'>{prog['icon']}</span>
-            <div class='prog-card-name'>{prog['name']}</div>
-            <div class='prog-card-desc'>{prog['desc']}</div>
-            <span class='prog-card-badge'>✅ متاح الآن</span>
-        </div>
-        """
+    
+    # كارت سداد فوري
+    cards_html += f"""
+    <div class='prog-card' onclick="window.location.href='?page=reports'">
+        <span class='prog-card-icon'>💳</span>
+        <div class='prog-card-name'>سداد فوري & Opay</div>
+        <div class='prog-card-desc'>عرض وتحليل بيانات السدادات — تقارير دقيقة ومتنوعة</div>
+        <span class='prog-card-badge'>✅ متاح الآن</span>
+    </div>
+    """
+    
+    # كارت الأقساط المستحقة
+    cards_html += f"""
+    <div class='prog-card' onclick="window.location.href='?page=installments'">
+        <span class='prog-card-icon'>📋</span>
+        <div class='prog-card-name'>الأقساط المستحقة</div>
+        <div class='prog-card-desc'>متابعة الأقساط المستحقة مع بيانات الدفع من فوري و Opay</div>
+        <span class='prog-card-badge'>✅ متاح الآن</span>
+    </div>
+    """
+    
+    # كارت شكاوى العملاء مع الإشعارات
+    notif_badge = ""
+    if unread_count > 0:
+        notif_badge = f"<span class='prog-card-notif-badge'>🔔 {unread_count}</span>"
+    
+    cards_html += f"""
+    <div class='prog-card' onclick="window.location.href='?page=complaints'">
+        {notif_badge}
+        <span class='prog-card-icon'>📝</span>
+        <div class='prog-card-name'>شكاوى العملاء</div>
+        <div class='prog-card-desc'>تسجيل ومتابعة شكاوى العملاء — إدخال وتعديل وموافقة إدارية</div>
+        <span class='prog-card-badge'>✅ متاح الآن</span>
+    </div>
+    """
     cards_html += "</div>"
+    
     st.markdown(cards_html, unsafe_allow_html=True)
 
-    # أزرار الفتح مستقلة تحت الكروت
-    btn_cols = st.columns(len(PROGRAMS))
-    for i, (prog_id, prog) in enumerate(PROGRAMS.items()):
-        with btn_cols[i]:
-            if st.button(f"فتح — {prog['name']}", key=f"open_{prog_id}", use_container_width=True):
-                st.query_params["page"] = prog_id
-                st.rerun()
+    # أزرار الفتح المستقلة (اختياري للتوافق مع الجوالات)
+    st.markdown("---")
+    btn_cols = st.columns(3)
+    with btn_cols[0]:
+        if st.button("🚀 فتح سداد فوري", use_container_width=True, key="btn_reports"):
+            st.query_params["page"] = "reports"
+            st.rerun()
+    with btn_cols[1]:
+        if st.button("📊 فتح الأقساط المستحقة", use_container_width=True, key="btn_inst"):
+            st.query_params["page"] = "installments"
+            st.rerun()
+    with btn_cols[2]:
+        if st.button("📝 فتح شكاوى العملاء", use_container_width=True, key="btn_complaints"):
+            st.query_params["page"] = "complaints"
+            st.rerun()
 
     st.markdown("""
     <div style="text-align:center;margin-top:40px;padding:20px;
                 color:#94a3b8;font-size:12px;border-top:1px solid #e2e8f0;">
         نظام كاريتاس للتقارير © 2025
     </div>
-    """,unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
 
 # ===================================================================
