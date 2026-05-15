@@ -2144,6 +2144,7 @@ def main_app():
     """, unsafe_allow_html=True)
 
     # ===================== داشبورد الكروت - محسن للموبايل =====================
+    # ===================== داشبورد الكروت - حل نهائي للموبايل =====================
     st.markdown('<div class="sec-title">🚀 الخدمات المتاحة</div>', unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns(3, gap="small")
@@ -2152,42 +2153,48 @@ def main_app():
         st.markdown("""
         <div style="background: linear-gradient(135deg, #fefce8, #fef9c3); 
                     padding: 28px 12px 20px; border-radius: 18px; text-align: center; 
-                    border: 1px solid #fde047; box-shadow: 0 3px 12px rgba(0,0,0,0.07); 
-                    transition: all 0.3s ease; cursor: pointer;" 
-             onclick="window.location.href='?page=complaints'">
+                    border: 1px solid #fde047; box-shadow: 0 3px 12px rgba(0,0,0,0.07);">
             <div style="font-size: 48px; margin-bottom: 10px;">📝</div>
             <div style="font-weight: 700; font-size: 15.5px; color: #854d0e; line-height:1.3;">شكاوى العملاء</div>
         </div>
         """, unsafe_allow_html=True)
+        
+        if st.button("دخول → شكاوى العملاء", use_container_width=True, type="primary", key="btn_comp"):
+            st.query_params["page"] = "complaints"
+            st.rerun()
 
     with col2:
         st.markdown("""
         <div style="background: linear-gradient(135deg, #ecfdf5, #d1fae5); 
                     padding: 28px 12px 20px; border-radius: 18px; text-align: center; 
-                    border: 1px solid #a7f3d0; box-shadow: 0 3px 12px rgba(0,0,0,0.07); 
-                    transition: all 0.3s ease; cursor: pointer;" 
-             onclick="window.location.href='?page=installments'">
+                    border: 1px solid #a7f3d0; box-shadow: 0 3px 12px rgba(0,0,0,0.07);">
             <div style="font-size: 48px; margin-bottom: 10px;">📋</div>
             <div style="font-weight: 700; font-size: 15.5px; color: #166534; line-height:1.3;">الأقساط المستحقة</div>
         </div>
         """, unsafe_allow_html=True)
+        
+        if st.button("دخول → الأقساط المستحقة", use_container_width=True, type="primary", key="btn_inst"):
+            st.query_params["page"] = "installments"
+            st.rerun()
 
     with col3:
         st.markdown("""
         <div style="background: linear-gradient(135deg, #eff6ff, #dbeafe); 
                     padding: 28px 12px 20px; border-radius: 18px; text-align: center; 
-                    border: 1px solid #bfdbfe; box-shadow: 0 3px 12px rgba(0,0,0,0.07); 
-                    transition: all 0.3s ease; cursor: pointer;" 
-             onclick="window.location.href='?page=reports'">
+                    border: 1px solid #bfdbfe; box-shadow: 0 3px 12px rgba(0,0,0,0.07);">
             <div style="font-size: 48px; margin-bottom: 10px;">💳</div>
             <div style="font-weight: 700; font-size: 15.5px; color: #1e40af; line-height:1.3;">سداد فوري & Opay</div>
         </div>
         """, unsafe_allow_html=True)
         
+        if st.button("دخول → سداد فوري", use_container_width=True, type="primary", key="btn_rep"):
+            st.query_params["page"] = "reports"
+            st.rerun()
+                    
     st.markdown("""
     <div style="text-align:center;margin-top:40px;padding:20px;
                 color:#94a3b8;font-size:12px;border-top:1px solid #e2e8f0;">
-        نظام كاريتاس للتقارير © 2025 | تصميم متكامل لإدارة الشكاوى والتقارير المالية
+        نظام كاريتاس للتقارير © 2026 | تصميم متكامل لإدارة الشكاوى والتقارير المالية
     </div>
     """, unsafe_allow_html=True)
 
