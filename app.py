@@ -1891,16 +1891,9 @@ def outstanding_page():
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
-# ===================================================================
-# ===================== الصفحة الرئيسية =====================
-# ===================================================================
 
 # ===================================================================
-# ===================== الصفحة الرئيسية (تم إصلاحها) =================
-# ===================================================================
-
-# ===================================================================
-# ===================== الصفحة الرئيسية (الإصدار النهائي المصحح) =================
+# ===================== الصفحة الرئيسية (طريقة Columns المضمونة) =================
 # ===================================================================
 
 def main_app():
@@ -1961,58 +1954,59 @@ def main_app():
     """, unsafe_allow_html=True)
 
     # ============================================================
-    # بناء الكروت الثلاثة بشكل صحيح 100%
+    # استخدام st.columns بدلاً من HTML Grid (مضمون 100%)
     # ============================================================
     
-    # شارة الإشعارات للكارت الثالث
-    notif_badge = f"<span class='prog-card-notif-badge'>🔔 {unread_count}</span>" if unread_count > 0 else ""
-    
-    # إنشاء HTML الكامل للكروت
-    cards_html = f'''
-    <div class="prog-cards-grid">
-        <!-- كارت 1: سداد فوري -->
-        <div class="prog-card" onclick="window.location.href='?page=reports'">
-            <span class="prog-card-icon">💳</span>
-            <div class="prog-card-name">سداد فوري &amp; Opay</div>
-            <div class="prog-card-desc">عرض وتحليل بيانات السدادات — تقارير دقيقة ومتنوعة</div>
-            <span class="prog-card-badge">✅ متاح الآن</span>
-        </div>
-        
-        <!-- كارت 2: الأقساط المستحقة -->
-        <div class="prog-card" onclick="window.location.href='?page=installments'">
-            <span class="prog-card-icon">📋</span>
-            <div class="prog-card-name">الأقساط المستحقة</div>
-            <div class="prog-card-desc">متابعة الأقساط المستحقة مع بيانات الدفع من فوري و Opay</div>
-            <span class="prog-card-badge">✅ متاح الآن</span>
-        </div>
-        
-        <!-- كارت 3: شكاوى العملاء مع شارة الإشعارات -->
-        <div class="prog-card" onclick="window.location.href='?page=complaints'">
-            {notif_badge}
-            <span class="prog-card-icon">📝</span>
-            <div class="prog-card-name">شكاوى العملاء</div>
-            <div class="prog-card-desc">تسجيل ومتابعة شكاوى العملاء — إدخال وتعديل وموافقة إدارية</div>
-            <span class="prog-card-badge">✅ متاح الآن</span>
-        </div>
-    </div>
-    '''
-    
-    # عرض الكروت
-    st.markdown(cards_html, unsafe_allow_html=True)
-
-    # أزرار الفتح الاحتياطية
-    st.markdown("---")
+    # إنشاء 3 أعمدة متساوية
     col1, col2, col3 = st.columns(3)
+    
+    # الكارت الأول - سداد فوري
     with col1:
-        if st.button("💳 سداد فوري", use_container_width=True, key="btn_reports"):
+        # شارة الإشعارات (فارغة لهذا الكارت)
+        notif_badge_1 = ""
+        st.markdown(f"""
+        <div class='prog-card' onclick="window.location.href='?page=reports'">
+            {notif_badge_1}
+            <span class='prog-card-icon'>💳</span>
+            <div class='prog-card-name'>سداد فوري &amp; Opay</div>
+            <div class='prog-card-desc'>عرض وتحليل بيانات السدادات — تقارير دقيقة ومتنوعة</div>
+            <span class='prog-card-badge'>✅ متاح الآن</span>
+        </div>
+        """, unsafe_allow_html=True)
+        # زر احتياطي تحت الكارت
+        if st.button("فتح 💳", key="btn1", use_container_width=True):
             st.query_params["page"] = "reports"
             st.rerun()
+    
+    # الكارت الثاني - الأقساط المستحقة
     with col2:
-        if st.button("📋 الأقساط المستحقة", use_container_width=True, key="btn_installments"):
+        notif_badge_2 = ""
+        st.markdown(f"""
+        <div class='prog-card' onclick="window.location.href='?page=installments'">
+            {notif_badge_2}
+            <span class='prog-card-icon'>📋</span>
+            <div class='prog-card-name'>الأقساط المستحقة</div>
+            <div class='prog-card-desc'>متابعة الأقساط المستحقة مع بيانات الدفع من فوري و Opay</div>
+            <span class='prog-card-badge'>✅ متاح الآن</span>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("فتح 📋", key="btn2", use_container_width=True):
             st.query_params["page"] = "installments"
             st.rerun()
+    
+    # الكارت الثالث - شكاوى العملاء (مع شارة الإشعارات)
     with col3:
-        if st.button("📝 شكاوى العملاء", use_container_width=True, key="btn_complaints"):
+        notif_badge_3 = f"<span class='prog-card-notif-badge'>🔔 {unread_count}</span>" if unread_count > 0 else ""
+        st.markdown(f"""
+        <div class='prog-card' onclick="window.location.href='?page=complaints'">
+            {notif_badge_3}
+            <span class='prog-card-icon'>📝</span>
+            <div class='prog-card-name'>شكاوى العملاء</div>
+            <div class='prog-card-desc'>تسجيل ومتابعة شكاوى العملاء — إدخال وتعديل وموافقة إدارية</div>
+            <span class='prog-card-badge'>✅ متاح الآن</span>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("فتح 📝", key="btn3", use_container_width=True):
             st.query_params["page"] = "complaints"
             st.rerun()
 
@@ -2022,6 +2016,7 @@ def main_app():
         نظام كاريتاس للتقارير © 2025
     </div>
     """, unsafe_allow_html=True)
+    
 # ===================================================================
 # ===================== تشغيل التطبيق =====================
 # ===================================================================
