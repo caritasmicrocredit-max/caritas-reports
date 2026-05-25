@@ -736,9 +736,14 @@ def generate_outstanding_excel(df, title="تقرير الأقساط المستح
         ws.row_dimensions[2].height = 28
 
         inst_col_  = next((c for c in ['inst_amount','قيمة القسط'] if c in df_part.columns), None)
-        fawry_col_ = next((c for c in ['fawry_amount','fawry_amt'] if c in df_part.columns), None)
-        opay_col_  = next((c for c in ['opay_amount','opay_amt'] if c in df_part.columns), None)
-
+        # تحديد عمود المدفوع
+        paid_col = None
+        if '_paid' in df_part.columns:
+            paid_col = '_paid'
+        elif 'fawry_amount' in df_part.columns and 'opay_amount' in df_part.columns:
+            # سنحسبه لاحقاً
+            pass
+            
         group_col = 'branch_name' if 'branch_name' in df_part.columns else df_part.columns[0]
         groups = sorted(df_part[group_col].dropna().unique().tolist())
 
@@ -750,7 +755,13 @@ def generate_outstanding_excel(df, title="تقرير الأقساط المستح
             part  = len(df_g[df_g['حالة الدفع'] == "⚠️ مسدد جزئي"])
             unpaid= len(df_g[df_g['حالة الدفع'] == "❌ غير مدفوع"])
             inst_t  = float(df_g[inst_col_].sum())  if inst_col_  else 0.0
-            paid_t  = float(df_g['_paid'].sum())     if '_paid' in df_g.columns else 0.0
+            # حساب المدفوع
+            if paid_col and paid_col in df_g.columns:
+                paid_t = float(df_g[paid_col].sum())
+            else:
+                fawry = df_g.get('fawry_amount', 0) if 'fawry_amount' in df_g.columns else 0
+                opay = df_g.get('opay_amount', 0) if 'opay_amount' in df_g.columns else 0
+                paid_t = float(fawry.sum() + opay.sum())
             remain  = inst_t - paid_t
 
             vals = [grp, len(df_g), full, part, unpaid, inst_t, paid_t, remain]
@@ -1306,7 +1317,7 @@ def show_list_tab(user, is_admin, user_branches):
       <th style='padding:11px 12px;color:#fff;text-align:center;white-space:nowrap;'>طريقة الاستقبال</th>
       <th style='padding:11px 12px;color:#fff;text-align:center;white-space:nowrap;'>موقف الشكوى</th>
       <th style='padding:11px 12px;color:#fff;text-align:center;white-space:nowrap;'>المدخل</th>
-     </tr></thead><tbody>
+    </table></thead><tbody>
     """
     for i, row in filtered.iterrows():
         bg = "#f8fafc" if i % 2 == 0 else "#ffffff"
@@ -1594,7 +1605,7 @@ def show_edit_requests_tab(user, is_admin):
                 f"<th style='padding:8px 12px;color:#fff;text-align:right;'>الحقل</th>"
                 f"<th style='padding:8px 12px;color:#fca5a5;text-align:center;'>القيمة القديمة</th>"
                 f"<th style='padding:8px 12px;color:#6ee7b7;text-align:center;'>القيمة الجديدة</th>"
-                f"</tr></thead><tbody>{chg_rows}</tbody></table>",
+                f"</table></thead><tbody>{chg_rows}</tbody></table>",
                 unsafe_allow_html=True
             )
 
@@ -1931,8 +1942,8 @@ def reports_page():
                 if df_code.empty: continue
                 bg,fg=code_color_map_html[code]; cnt=len(df_code); amt=df_code['المبلغ'].sum()
                 date_cell=(f"<td rowspan='{rowspan_val}' style='padding:10px 14px;text-align:center;border-bottom:2px solid #cbd5e1;border-left:1px solid #e2e8f0;font-weight:700;color:#1e3a8a;vertical-align:middle;background:#f8fafc;font-size:13px;white-space:nowrap;'>{d}</td>") if first_code else ""
-                rows_html+=(f"<tr>"+date_cell+f"<td style='padding:9px 14px;text-align:center;border-bottom:1px solid #e2e8f0;background:{bg};color:{fg};font-weight:700;font-size:12px;'>{code}</td><td style='padding:9px 14px;text-align:center;border-bottom:1px solid #e2e8f0;background:{bg};color:{fg};font-weight:700;'>{cnt:,}</td><td style='padding:9px 14px;text-align:center;border-bottom:1px solid #e2e8f0;background:{bg};color:{fg};font-weight:700;'>{amt:,.2f}</td></tr>"); first_code=False
-            rows_html+=(f"<tr style='background:#1e3a8a;'><td style='padding:10px 14px;text-align:center;color:#fff;font-weight:800;border-bottom:2px solid #60a5fa;font-size:12px;'>✦ إجمالي {d}</td><td style='padding:10px;text-align:center;color:#bfdbfe;font-weight:800;border-bottom:2px solid #60a5fa;'>الكل</td><td style='padding:10px;text-align:center;color:#fff;font-weight:800;border-bottom:2px solid #60a5fa;'>{day_total_count:,}</td><td style='padding:10px;text-align:center;color:#fde68a;font-weight:800;border-bottom:2px solid #60a5fa;'>{day_total_amt:,.2f}</td><tr>")
+                rows_html+=(f"<tr>"+date_cell+f"<td style='padding:9px 14px;text-align:center;border-bottom:1px solid #e2e8f0;background:{bg};color:{fg};font-weight:700;font-size:12px;'>{code}</td><td style='padding:9px 14px;text-align:center;border-bottom:1px solid #e2e8f0;background:{bg};color:{fg};font-weight:700;'>{cnt:,}</td><td style='padding:9px 14px;text-align:center;border-bottom:1px solid #e2e8f0;background:{bg};color:{fg};font-weight:700;'>{amt:,.2f}</td></td>"); first_code=False
+            rows_html+=(f"<tr style='background:#1e3a8a;'><td style='padding:10px 14px;text-align:center;color:#fff;font-weight:800;border-bottom:2px solid #60a5fa;font-size:12px;'>✦ إجمالي {d}</td><td style='padding:10px;text-align:center;color:#bfdbfe;font-weight:800;border-bottom:2px solid #60a5fa;'>الكل</td><td style='padding:10px;text-align:center;color:#fff;font-weight:800;border-bottom:2px solid #60a5fa;'>{day_total_count:,}</td><td style='padding:10px;text-align:center;color:#fde68a;font-weight:800;border-bottom:2px solid #60a5fa;'>{day_total_amt:,.2f}</td></tr>")
         grand_count=len(final_df); grand_amt=final_df['المبلغ'].sum()
         rows_html+=(f"<tr style='background:#0f172a;'><td style='padding:12px 14px;text-align:center;color:#fff;font-weight:800;'>الإجمالي الكلي</td><td style='padding:12px;text-align:center;color:#93c5fd;font-weight:800;'>—</td><td style='padding:12px;text-align:center;color:#fff;font-weight:800;'>{grand_count:,}</td><td style='padding:12px;text-align:center;color:#fde68a;font-weight:800;'>{grand_amt:,.2f}</td></tr>")
         th="padding:12px 14px;text-align:center;color:#fff;font-size:13px;font-weight:700;white-space:nowrap;"
@@ -1976,7 +1987,7 @@ def reports_page():
                     first_code_in_day=False; first_day_in_br=False
                 _rows+=(f"<tr style='background:#0f172a;'><td style='padding:9px 10px;text-align:center;color:#93c5fd;font-weight:800;border-bottom:1.5px solid #334155;font-size:11px;'>✦ {d}</td><td style='padding:9px 10px;text-align:center;color:#bfdbfe;font-weight:800;border-bottom:1.5px solid #334155;font-size:11px;'>الكل</td><td style='padding:9px 10px;text-align:center;color:#fff;font-weight:800;border-bottom:1.5px solid #334155;'>{day_cnt:,}</td><td style='padding:9px 10px;text-align:center;color:#fde68a;font-weight:800;border-bottom:1.5px solid #334155;'>{day_amt:,.2f}</td></tr>")
         _rows+=(f"<tr style='background:#1e3a8a;'><td colspan='2' style='padding:12px;text-align:center;color:#fff;font-weight:800;font-size:13px;'>الإجمالي الكلي</td><td style='padding:12px;text-align:center;color:#bfdbfe;font-weight:800;'>—</td><td style='padding:12px;text-align:center;color:#fff;font-weight:800;'>{len(final_df):,}</td><td style='padding:12px;text-align:center;color:#fde68a;font-weight:800;'>{final_df['المبلغ'].sum():,.2f}</td></tr>")
-        st.markdown(f"<div style='overflow-x:auto;'><table style='width:100%;border-collapse:collapse;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 4px 20px rgba(30,58,138,0.12);font-size:12px;'><thead><tr style='background:#1e3a8a;'><th style='{_th_r}'>الفرع</th><th style='{_th}'>التاريخ</th><th style='{_th}'>كود الخدمة</th><th style='{_th}'>عدد الحركات</th><th style='{_th}'>إجمالي المبلغ (ج.م)</th></tr></thead><tbody>{_rows}</tbody></table></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='overflow-x:auto;'><table style='width:100%;border-collapse:collapse;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 4px 20px rgba(30,58,138,0.12);font-size:12px;'><thead><tr style='background:#1e3a8a;'><th style='{_th_r}'>الفرع</th><th style='{_th}'>التاريخ</th><th style='{_th}'>كود الخدمة</th><th style='{_th}'>عدد الحركات</th><th style='{_th}'>إجمالي المبلغ (ج.م)</th></table></thead><tbody>{_rows}</tbody></table></div>", unsafe_allow_html=True)
 
     st.markdown('<div class="sec-title">📋 البيانات التفصيلية</div>', unsafe_allow_html=True)
     display_df = final_df.copy().rename(columns={'client_code':'كود العميل','client_name':'اسم العميل','branch_name':'الفرع'})
@@ -2150,6 +2161,7 @@ def outstanding_page():
 
     unique_branches = df_acc[branch_col].dropna().unique().tolist()
 
+    # دالة بناء جدول الفروع (كما هي في الكود القديم)
     def build_branch_table(df_data, title_prefix=""):
         rows = []
         for br in sorted(df_data[branch_col].dropna().unique()):
@@ -2165,7 +2177,7 @@ def outstanding_page():
         tot={'اسم الفرع':'الإجمالي الكلي','عدد الكل':df_tbl['عدد الكل'].sum(),'مسدد بالكامل (عدد)':df_tbl['مسدد بالكامل (عدد)'].sum(),'مسدد جزئياً (عدد)':df_tbl['مسدد جزئياً (عدد)'].sum(),'غير مدفوع (عدد)':df_tbl['غير مدفوع (عدد)'].sum(),'إجمالي المستحق':df_tbl['إجمالي المستحق'].sum(),'إجمالي المسدد كلياً':df_tbl['إجمالي المسدد كلياً'].sum(),'إجمالي المسدد جزئياً':df_tbl['إجمالي المسدد جزئياً'].sum(),'إجمالي المتبقي':df_tbl['إجمالي المتبقي'].sum()}
         def td(val,color='#1e293b',bold=False,bg=''):
             fw='font-weight:700;' if bold else 'font-weight:500;'; bgc=f'background:{bg};' if bg else ''
-            return f"<td style='padding:10px 12px;text-align:center;border-bottom:1px solid #e2e8f0;color:{color};{fw}{bgc}'>{val}<tr>"
+            return f"<td style='padding:10px 12px;text-align:center;border-bottom:1px solid #e2e8f0;color:{color};{fw}{bgc}'>{val}</td>"
         def td_r(val,color='#1e293b',bold=False):
             fw='font-weight:700;' if bold else 'font-weight:500;'
             return f"<td style='padding:10px 14px;text-align:right;border-bottom:1px solid #e2e8f0;color:{color};{fw}'>{val}</td>"
@@ -2247,8 +2259,8 @@ def outstanding_page():
 
     st.markdown('<div class="sec-title">📥 تحميل التقرير</div>', unsafe_allow_html=True)
     
+    # استخدم الدالة الجديدة
     st.info("📊 الملف يحتوي على: البيانات الكاملة + ملخص الفروع + ملخص المسؤولين + شيت منفصل لكل فرع + شيت منفصل لكل مسؤول")
-    
     xls = generate_outstanding_excel(df_acc, title=f"تقرير الأقساط المستحقة")
     st.download_button(
         "📥 تحميل Excel الكامل (مقسّم)",
