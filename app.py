@@ -634,43 +634,196 @@ def generate_reports_excel_daily(df_display, original_df):
     buf=io.BytesIO(); wb.save(buf); return buf.getvalue()
 
 def generate_outstanding_excel(df, title="تقرير الأقساط المستحقة"):
-    wb=Workbook(); ws=wb.active; ws.title="الأقساط المستحقة"
-    ws.sheet_view.rightToLeft=True
-    cols=list(df.columns); last_col=get_column_letter(len(cols))
-    ws.merge_cells(f'A1:{last_col}1')
-    ws['A1'].value=title
-    ws['A1'].font=Font(bold=True,size=16,color="1E3A8A",name="Arial")
-    ws['A1'].fill=PatternFill("solid",fgColor="EFF6FF")
-    ws['A1'].alignment=Alignment(horizontal='center',vertical='center')
-    ws.row_dimensions[1].height=35
-    headers=['اسم المسؤول','كود الفرع','اسم الفرع','تاريخ استحقاق القسط','تاريخ حالة القسط',
-             'كود العميل','اسم العميل','الرقم القومي','رقم القرض','حالة القسط','قيمة القسط',
-             'نوع الفاتورة','تاريخ التحويل','وقت التحويل','مبلغ فوري','رقم حساب الفوترة',
-             'رقم تحويل فوري','الرقم المرجعي','مبلغ Opay','تاريخ الدفع Opay','وقت الدفع Opay']
-    for ci,h in enumerate(headers[:len(cols)],1):
-        c=ws.cell(row=2,column=ci,value=h)
-        c.font=Font(bold=True,color="FFFFFF",name="Arial",size=11)
-        c.fill=PatternFill("solid",fgColor="1E3A8A")
-        c.alignment=Alignment(horizontal='center',vertical='center',wrap_text=True)
-        c.border=thin_border()
-    ws.row_dimensions[2].height=30
-    for ri,row in enumerate(df.itertuples(index=False),3):
-        for ci,val in enumerate(row,1):
-            c=ws.cell(row=ri,column=ci,value=val)
-            c.alignment=Alignment(horizontal='center',vertical='center')
-            c.font=Font(name="Arial",size=10); c.border=thin_border()
-            st_=str(row[9]) if len(row)>9 else ""
-            if "مسدد جزئي" in st_:
-                c.fill=PatternFill("solid",fgColor="FFCCCC"); c.font=Font(color="9C0006",bold=True)
-            elif "غير مدفوع" in st_ or st_=="":
-                c.fill=PatternFill("solid",fgColor="FFE699"); c.font=Font(color="7F4A00")
-            else:
-                c.fill=PatternFill("solid",fgColor="E2EFDA"); c.font=Font(color="375623")
-    cw={'اسم العميل':25,'اسم الفرع':20,'اسم المسؤول':18,'الرقم القومي':15}
-    for ci,col in enumerate(headers[:len(cols)],1):
-        ws.column_dimensions[get_column_letter(ci)].width=cw.get(col,15)
-    ws.freeze_panes="A3"
-    buf=io.BytesIO(); wb.save(buf); return buf.getvalue()
+    wb = Workbook()
+    wb.remove(wb.active)
+    DARK = "1E3A8A"; LIGHT = "EFF6FF"; WHT = "FFFFFF"
+
+    STATUS_FILLS = {
+        "✅ مدفوع بالكامل": ("E2EFDA", "375623"),
+        "⚠️ مسدد جزئي":    ("FFCCCC", "9C0006"),
+        "❌ غير مدفوع":     ("FFE699", "7F4A00"),
+    }
+
+    arabic_headers = [
+        'اسم المسؤول','كود الفرع','اسم الفرع','تاريخ استحقاق القسط','تاريخ حالة القسط',
+        'كود العميل','اسم العميل','الرقم القومي','رقم القرض','حالة القسط','قيمة القسط',
+        'نوع الفاتورة','تاريخ التحويل','وقت التحويل','مبلغ فوري','رقم حساب الفوترة',
+        'رقم تحويل فوري','الرقم المرجعي','مبلغ Opay','تاريخ الدفع Opay','وقت الدفع Opay',
+        'حالة الدفع'
+    ]
+    COL_WIDTHS_MAP = {
+        'اسم المسؤول':18,'كود الفرع':12,'اسم الفرع':20,'تاريخ استحقاق القسط':16,
+        'تاريخ حالة القسط':16,'كود العميل':14,'اسم العميل':25,'الرقم القومي':15,
+        'رقم القرض':14,'حالة القسط':14,'قيمة القسط':13,'نوع الفاتورة':14,
+        'تاريخ التحويل':14,'وقت التحويل':12,'مبلغ فوري':13,'رقم حساب الفوترة':16,
+        'رقم تحويل فوري':16,'الرقم المرجعي':16,'مبلغ Opay':13,
+        'تاريخ الدفع Opay':16,'وقت الدفع Opay':14,'حالة الدفع':16,
+    }
+
+    # تحديد الأعمدة الموجودة فعلاً
+    db_cols_all = [
+        'officer_name','branch_code','branch_name','inst_mat_date','inst_status_date',
+        'client_code','client_name','nation_id','loan_number','inst_status','inst_amount',
+        'bill_type','transfer_date','transfer_time','fawry_amount','billing_account',
+        'fawry_transfer_number','reference_number','opay_amount','opay_payment_date',
+        'opay_payment_time','حالة الدفع'
+    ]
+    available_cols = [c for c in db_cols_all if c in df.columns]
+    available_headers = []
+    for c, h in zip(db_cols_all, arabic_headers):
+        if c in df.columns:
+            available_headers.append(h)
+
+    # دالة كتابة شيت بيانات
+    def write_data_sheet(ws, df_part, sheet_title):
+        ws.sheet_view.rightToLeft = True
+        n = len(available_cols)
+        last_col = get_column_letter(n)
+        ws.merge_cells(f'A1:{last_col}1')
+        ws['A1'].value = sheet_title
+        ws['A1'].font = Font(bold=True, size=14, color=DARK, name="Arial")
+        ws['A1'].fill = PatternFill("solid", fgColor=LIGHT)
+        ws['A1'].alignment = Alignment(horizontal='center', vertical='center')
+        ws.row_dimensions[1].height = 32
+
+        for ci, h in enumerate(available_headers, 1):
+            c = ws.cell(row=2, column=ci, value=h)
+            c.font = Font(bold=True, color=WHT, name="Arial", size=11)
+            c.fill = PatternFill("solid", fgColor=DARK)
+            c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+            c.border = thin_border()
+        ws.row_dimensions[2].height = 28
+
+        for ri, (_, row) in enumerate(df_part.iterrows(), 3):
+            pay_status = str(row.get('حالة الدفع', ''))
+            bg_h, fg_h = STATUS_FILLS.get(pay_status, ("F8FAFC", "1E293B"))
+            for ci, col in enumerate(available_cols, 1):
+                val = row.get(col, "")
+                if pd.isna(val): val = ""
+                c = ws.cell(row=ri, column=ci, value=str(val) if val != "" else "")
+                c.fill = PatternFill("solid", fgColor=bg_h)
+                c.font = Font(name="Arial", size=10, color=fg_h)
+                c.alignment = Alignment(horizontal='center', vertical='center')
+                c.border = thin_border()
+            ws.row_dimensions[ri].height = 18
+
+        for ci, h in enumerate(available_headers, 1):
+            ws.column_dimensions[get_column_letter(ci)].width = COL_WIDTHS_MAP.get(h, 14)
+        ws.freeze_panes = "A3"
+
+    # دالة كتابة شيت ملخص
+    def write_summary_sheet(ws, df_part, sheet_title):
+        ws.sheet_view.rightToLeft = True
+        summary_headers = [
+            "الاسم", "إجمالي الأقساط", "✅ مدفوع بالكامل",
+            "⚠️ مسدد جزئي", "❌ غير مدفوع",
+            "إجمالي المستحق (ج.م)", "إجمالي المدفوع (ج.م)", "إجمالي المتبقي (ج.م)"
+        ]
+        n = len(summary_headers)
+        ws.merge_cells(f'A1:{get_column_letter(n)}1')
+        ws['A1'].value = sheet_title
+        ws['A1'].font = Font(bold=True, size=14, color=DARK, name="Arial")
+        ws['A1'].fill = PatternFill("solid", fgColor=LIGHT)
+        ws['A1'].alignment = Alignment(horizontal='center', vertical='center')
+        ws.row_dimensions[1].height = 32
+
+        for ci, h in enumerate(summary_headers, 1):
+            c = ws.cell(row=2, column=ci, value=h)
+            c.font = Font(bold=True, color=WHT, name="Arial", size=11)
+            c.fill = PatternFill("solid", fgColor=DARK)
+            c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+            c.border = thin_border()
+        ws.row_dimensions[2].height = 28
+
+        inst_col_  = next((c for c in ['inst_amount','قيمة القسط'] if c in df_part.columns), None)
+        fawry_col_ = next((c for c in ['fawry_amount','fawry_amt'] if c in df_part.columns), None)
+        opay_col_  = next((c for c in ['opay_amount','opay_amt'] if c in df_part.columns), None)
+
+        group_col = 'branch_name' if 'branch_name' in df_part.columns else df_part.columns[0]
+        groups = sorted(df_part[group_col].dropna().unique().tolist())
+
+        ri = 3
+        totals = [0, 0, 0, 0, 0.0, 0.0, 0.0]
+        for grp in groups:
+            df_g = df_part[df_part[group_col] == grp]
+            full  = len(df_g[df_g['حالة الدفع'] == "✅ مدفوع بالكامل"])
+            part  = len(df_g[df_g['حالة الدفع'] == "⚠️ مسدد جزئي"])
+            unpaid= len(df_g[df_g['حالة الدفع'] == "❌ غير مدفوع"])
+            inst_t  = float(df_g[inst_col_].sum())  if inst_col_  else 0.0
+            paid_t  = float(df_g['_paid'].sum())     if '_paid' in df_g.columns else 0.0
+            remain  = inst_t - paid_t
+
+            vals = [grp, len(df_g), full, part, unpaid, inst_t, paid_t, remain]
+            bg = "F8FAFC" if ri % 2 == 0 else "FFFFFF"
+            for ci, val in enumerate(vals, 1):
+                c = ws.cell(row=ri, column=ci, value=val)
+                c.fill = PatternFill("solid", fgColor=bg)
+                c.font = Font(name="Arial", size=10, color="1E293B")
+                c.alignment = Alignment(horizontal='center', vertical='center')
+                c.border = thin_border()
+                if ci >= 6:
+                    c.number_format = '#,##0.00'
+            ws.cell(row=ri, column=1).font = Font(name="Arial", size=10, color=DARK, bold=True)
+
+            for i, v in enumerate([len(df_g), full, part, unpaid, inst_t, paid_t, remain]):
+                totals[i] += v
+            ri += 1
+
+        # صف الإجمالي
+        total_vals = ["✦ الإجمالي الكلي"] + totals
+        for ci, val in enumerate(total_vals, 1):
+            c = ws.cell(row=ri, column=ci, value=val)
+            c.fill = PatternFill("solid", fgColor="1E3A8A")
+            c.font = Font(bold=True, color="FFFFFF", name="Arial", size=11)
+            c.alignment = Alignment(horizontal='center', vertical='center')
+            c.border = thin_border()
+            if ci >= 6:
+                c.number_format = '#,##0.00'
+        ws.row_dimensions[ri].height = 26
+
+        col_widths = [22, 14, 16, 16, 14, 20, 20, 20]
+        for ci, w in enumerate(col_widths, 1):
+            ws.column_dimensions[get_column_letter(ci)].width = w
+        ws.freeze_panes = "A3"
+
+    # شيت 1: البيانات الكاملة
+    ws_all = wb.create_sheet("📋 البيانات الكاملة")
+    write_data_sheet(ws_all, df, title)
+
+    # شيت 2: ملخص الفروع
+    ws_br_sum = wb.create_sheet("🏢 ملخص الفروع")
+    if 'branch_name' in df.columns:
+        write_summary_sheet(ws_br_sum, df, "ملخص إجمالي الفروع")
+
+    # شيت 3: ملخص المسؤولين
+    officer_col_ = next((c for c in df.columns if any(k in c.lower() for k in ['officer','مسؤول','مسئول'])), None)
+    ws_off_sum = wb.create_sheet("👥 ملخص المسؤولين")
+    if officer_col_:
+        df_off = df.copy()
+        df_off['branch_name'] = df_off[officer_col_]  # نستخدم نفس دالة الملخص باستبدال العمود
+        write_summary_sheet(ws_off_sum, df_off, "ملخص إجمالي المسؤولين")
+
+    # شيتات الفروع المنفصلة
+    if 'branch_name' in df.columns:
+        branches = sorted(df['branch_name'].dropna().unique().tolist())
+        for br in branches:
+            df_br = df[df['branch_name'] == br].copy()
+            safe_name = str(br)[:25]
+            ws_br = wb.create_sheet(f"فرع {safe_name}"[:31])
+            write_data_sheet(ws_br, df_br, f"أقساط فرع: {br}")
+
+    # شيتات المسؤولين المنفصلة
+    if officer_col_:
+        officers = sorted(df[officer_col_].dropna().unique().tolist())
+        for off in officers:
+            df_off = df[df[officer_col_] == off].copy()
+            safe_name = str(off)[:25]
+            ws_off = wb.create_sheet(f"مسؤول {safe_name}"[:31])
+            write_data_sheet(ws_off, df_off, f"أقساط المسؤول: {off}")
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
 
 def generate_complaints_excel(df):
     wb = Workbook(); ws = wb.active; ws.title = "سجل الشكاوى"
@@ -1153,7 +1306,7 @@ def show_list_tab(user, is_admin, user_branches):
       <th style='padding:11px 12px;color:#fff;text-align:center;white-space:nowrap;'>طريقة الاستقبال</th>
       <th style='padding:11px 12px;color:#fff;text-align:center;white-space:nowrap;'>موقف الشكوى</th>
       <th style='padding:11px 12px;color:#fff;text-align:center;white-space:nowrap;'>المدخل</th>
-    </tr></thead><tbody>
+     </tr></thead><tbody>
     """
     for i, row in filtered.iterrows():
         bg = "#f8fafc" if i % 2 == 0 else "#ffffff"
@@ -1696,7 +1849,7 @@ def reports_page():
     if v_dates.empty:
         st.info("📭 لا توجد تواريخ متاحة"); return
 
-        st.markdown('<div class="filter-bar"><div class="filter-bar-title">🔍 أدوات البحث والتصفية</div>', unsafe_allow_html=True)
+    st.markdown('<div class="filter-bar"><div class="filter-bar-title">🔍 أدوات البحث والتصفية</div>', unsafe_allow_html=True)
 
     # تاريخ اليوم + أول الشهر الحالي
     today = datetime.now().date()
@@ -1779,7 +1932,7 @@ def reports_page():
                 bg,fg=code_color_map_html[code]; cnt=len(df_code); amt=df_code['المبلغ'].sum()
                 date_cell=(f"<td rowspan='{rowspan_val}' style='padding:10px 14px;text-align:center;border-bottom:2px solid #cbd5e1;border-left:1px solid #e2e8f0;font-weight:700;color:#1e3a8a;vertical-align:middle;background:#f8fafc;font-size:13px;white-space:nowrap;'>{d}</td>") if first_code else ""
                 rows_html+=(f"<tr>"+date_cell+f"<td style='padding:9px 14px;text-align:center;border-bottom:1px solid #e2e8f0;background:{bg};color:{fg};font-weight:700;font-size:12px;'>{code}</td><td style='padding:9px 14px;text-align:center;border-bottom:1px solid #e2e8f0;background:{bg};color:{fg};font-weight:700;'>{cnt:,}</td><td style='padding:9px 14px;text-align:center;border-bottom:1px solid #e2e8f0;background:{bg};color:{fg};font-weight:700;'>{amt:,.2f}</td></tr>"); first_code=False
-            rows_html+=(f"<tr style='background:#1e3a8a;'><td style='padding:10px 14px;text-align:center;color:#fff;font-weight:800;border-bottom:2px solid #60a5fa;font-size:12px;'>✦ إجمالي {d}</td><td style='padding:10px;text-align:center;color:#bfdbfe;font-weight:800;border-bottom:2px solid #60a5fa;'>الكل</td><td style='padding:10px;text-align:center;color:#fff;font-weight:800;border-bottom:2px solid #60a5fa;'>{day_total_count:,}</td><td style='padding:10px;text-align:center;color:#fde68a;font-weight:800;border-bottom:2px solid #60a5fa;'>{day_total_amt:,.2f}</td></tr>")
+            rows_html+=(f"<tr style='background:#1e3a8a;'><td style='padding:10px 14px;text-align:center;color:#fff;font-weight:800;border-bottom:2px solid #60a5fa;font-size:12px;'>✦ إجمالي {d}</td><td style='padding:10px;text-align:center;color:#bfdbfe;font-weight:800;border-bottom:2px solid #60a5fa;'>الكل</td><td style='padding:10px;text-align:center;color:#fff;font-weight:800;border-bottom:2px solid #60a5fa;'>{day_total_count:,}</td><td style='padding:10px;text-align:center;color:#fde68a;font-weight:800;border-bottom:2px solid #60a5fa;'>{day_total_amt:,.2f}</td><tr>")
         grand_count=len(final_df); grand_amt=final_df['المبلغ'].sum()
         rows_html+=(f"<tr style='background:#0f172a;'><td style='padding:12px 14px;text-align:center;color:#fff;font-weight:800;'>الإجمالي الكلي</td><td style='padding:12px;text-align:center;color:#93c5fd;font-weight:800;'>—</td><td style='padding:12px;text-align:center;color:#fff;font-weight:800;'>{grand_count:,}</td><td style='padding:12px;text-align:center;color:#fde68a;font-weight:800;'>{grand_amt:,.2f}</td></tr>")
         th="padding:12px 14px;text-align:center;color:#fff;font-size:13px;font-weight:700;white-space:nowrap;"
@@ -2012,7 +2165,7 @@ def outstanding_page():
         tot={'اسم الفرع':'الإجمالي الكلي','عدد الكل':df_tbl['عدد الكل'].sum(),'مسدد بالكامل (عدد)':df_tbl['مسدد بالكامل (عدد)'].sum(),'مسدد جزئياً (عدد)':df_tbl['مسدد جزئياً (عدد)'].sum(),'غير مدفوع (عدد)':df_tbl['غير مدفوع (عدد)'].sum(),'إجمالي المستحق':df_tbl['إجمالي المستحق'].sum(),'إجمالي المسدد كلياً':df_tbl['إجمالي المسدد كلياً'].sum(),'إجمالي المسدد جزئياً':df_tbl['إجمالي المسدد جزئياً'].sum(),'إجمالي المتبقي':df_tbl['إجمالي المتبقي'].sum()}
         def td(val,color='#1e293b',bold=False,bg=''):
             fw='font-weight:700;' if bold else 'font-weight:500;'; bgc=f'background:{bg};' if bg else ''
-            return f"<td style='padding:10px 12px;text-align:center;border-bottom:1px solid #e2e8f0;color:{color};{fw}{bgc}'>{val}</td>"
+            return f"<td style='padding:10px 12px;text-align:center;border-bottom:1px solid #e2e8f0;color:{color};{fw}{bgc}'>{val}<tr>"
         def td_r(val,color='#1e293b',bold=False):
             fw='font-weight:700;' if bold else 'font-weight:500;'
             return f"<td style='padding:10px 14px;text-align:right;border-bottom:1px solid #e2e8f0;color:{color};{fw}'>{val}</td>"
@@ -2093,10 +2246,17 @@ def outstanding_page():
                 st.warning(f"تعذر عرض ملخص المسؤولين: {e}")
 
     st.markdown('<div class="sec-title">📥 تحميل التقرير</div>', unsafe_allow_html=True)
-    xls=generate_outstanding_excel(df_acc)
-    st.download_button("📊 تحميل Excel ملون",data=xls,
+    
+    st.info("📊 الملف يحتوي على: البيانات الكاملة + ملخص الفروع + ملخص المسؤولين + شيت منفصل لكل فرع + شيت منفصل لكل مسؤول")
+    
+    xls = generate_outstanding_excel(df_acc, title=f"تقرير الأقساط المستحقة")
+    st.download_button(
+        "📥 تحميل Excel الكامل (مقسّم)",
+        data=xls,
         file_name=f"الاقساط_المستحقة_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True
+    )
 
 
 # ===================================================================
@@ -2150,7 +2310,6 @@ def main_app():
     </div>
     """, unsafe_allow_html=True)
 
-    # ===================== داشبورد الكروت - محسن للموبايل =====================
     # ===================== داشبورد الكروت - حل نهائي للموبايل =====================
     st.markdown('<div class="sec-title">🚀 الخدمات المتاحة</div>', unsafe_allow_html=True)
 
