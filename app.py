@@ -601,8 +601,7 @@ def generate_reports_excel_daily(df_display, original_df):
             if str(col)=='كود الخدمة':
                 code_ci=ci; break
         for ri, row in enumerate(df_part.itertuples(index=False), 3):
-            row_code = None
-            if code_ci:
+            row_code = None            if code_ci:
                 row_code = str(row[code_ci-1]) if len(row)>=code_ci else None
             if row_code and row_code in code_color_map:
                 bg_hex, fg_hex = code_color_map[row_code]; use_alt=False
@@ -1248,7 +1247,7 @@ def show_entry_tab(user, is_admin, user_branches):
                     st.error(f"❌ خطأ في الحفظ: {result}")
 
 
-# ── تبويب 2: قائمة الشكاوى ───────────────────────────────────────
+# ── تبويب 2: قائمة الشكاوى (المعدل مع زر عرض/تعديل بجانب كل شكوى) ──
 def show_list_tab(user, is_admin, user_branches):
     st.markdown('<div class="sec-title">📋 قائمة الشكاوى المسجلة</div>', unsafe_allow_html=True)
 
@@ -1259,6 +1258,7 @@ def show_list_tab(user, is_admin, user_branches):
         st.info("📭 لا توجد شكاوى مسجلة حتى الآن")
         return
 
+    # الفلاتر
     st.markdown('<div class="filter-bar"><div class="filter-bar-title">🔍 أدوات البحث والتصفية</div>', unsafe_allow_html=True)
     fc1, fc2, fc3, fc4 = st.columns(4)
     with fc1:
@@ -1291,6 +1291,7 @@ def show_list_tab(user, is_admin, user_branches):
         st.warning("⚠️ لا توجد نتائج تطابق معايير البحث")
         return
 
+    # KPIs
     cnt = filtered['final_status'].value_counts()
     k1, k2, k3, k4 = st.columns(4)
     with k1:
@@ -1305,43 +1306,7 @@ def show_list_tab(user, is_admin, user_branches):
         v = cnt.get('مرفوض', 0)
         st.markdown(f'<div class="kpi-card" style="border-top-color:#dc2626"><div class="kpi-lbl">❌ مرفوض</div><div class="kpi-val" style="color:#dc2626">{v:,}</div></div>', unsafe_allow_html=True)
 
-    tbl_html = """
-    <div style='overflow-x:auto;margin-bottom:20px;'>
-    <table style='width:100%;border-collapse:collapse;background:#fff;border-radius:14px;
-                  overflow:hidden;box-shadow:0 4px 20px rgba(30,58,138,0.10);font-size:12px;'>
-    <thead><tr style='background:#1e3a8a;'>
-      <th style='padding:11px 12px;color:#fff;text-align:center;white-space:nowrap;'>رقم الشكوى</th>
-      <th style='padding:11px 12px;color:#fff;text-align:center;white-space:nowrap;'>تاريخ التقديم</th>
-      <th style='padding:11px 12px;color:#fff;text-align:center;white-space:nowrap;'>الفرع</th>
-      <th style='padding:11px 12px;color:#fff;text-align:center;white-space:nowrap;'>اسم الشاكي</th>
-      <th style='padding:11px 12px;color:#fff;text-align:center;white-space:nowrap;'>طريقة الاستقبال</th>
-      <th style='padding:11px 12px;color:#fff;text-align:center;white-space:nowrap;'>موقف الشكوى</th>
-      <th style='padding:11px 12px;color:#fff;text-align:center;white-space:nowrap;'>المدخل</th>
-    </tr></thead><tbody>
-    """
-    for i, row in filtered.iterrows():
-        bg = "#f8fafc" if i % 2 == 0 else "#ffffff"
-        tbl_html += (
-            f"<tr style='background:{bg};'>"
-            f"<td style='padding:10px 12px;text-align:center;border-bottom:1px solid #e2e8f0;"
-            f"font-weight:700;color:#1e3a8a;'>{row.get('complaint_number','—')}</td>"
-            f"<td style='padding:10px 12px;text-align:center;border-bottom:1px solid #e2e8f0;'>"
-            f"{str(row.get('submission_date','—'))[:10]}</td>"
-            f"<td style='padding:10px 12px;text-align:center;border-bottom:1px solid #e2e8f0;'>"
-            f"{row.get('branch_name','—')}</td>"
-            f"<td style='padding:10px 12px;text-align:center;border-bottom:1px solid #e2e8f0;'>"
-            f"{row.get('complainant_name','—')}</td>"
-            f"<td style='padding:10px 12px;text-align:center;border-bottom:1px solid #e2e8f0;'>"
-            f"{row.get('reception_method','—')}</td>"
-            f"<td style='padding:10px 12px;text-align:center;border-bottom:1px solid #e2e8f0;'>"
-            f"{_status_badge(row.get('final_status','—'))}</td>"
-            f"<td style='padding:10px 12px;text-align:center;border-bottom:1px solid #e2e8f0;"
-            f"font-size:11px;color:#64748b;'>{row.get('created_by_name','—')}</td>"
-            f"</tr>"
-        )
-    tbl_html += "</tbody></table></div>"
-    st.markdown(tbl_html, unsafe_allow_html=True)
-
+    # زر تنزيل Excel
     col_dl1, col_dl2 = st.columns([3, 1])
     with col_dl2:
         xls_data = generate_complaints_excel(filtered)
@@ -1353,182 +1318,248 @@ def show_list_tab(user, is_admin, user_branches):
             use_container_width=True
         )
 
-    st.markdown('<div class="sec-title">🔍 عرض وتعديل شكوى</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec-title">📋 الشكاوى — اضغط عرض / تعديل بجانب أي شكوى</div>', unsafe_allow_html=True)
 
-    opts = {
-        f"{r['complaint_number']}  —  {r['complainant_name']}  ({r['branch_name']})": r
-        for _, r in filtered.iterrows()
-    }
-    sel_lbl = st.selectbox("اختر الشكوى لعرض تفاصيلها أو طلب تعديل", list(opts.keys()), key="cl_sel")
+    # عرض كل شكوى مع زر عرض/تعديل بجانبها
+    for i, row in filtered.iterrows():
+        row_key = str(row.get('id', i))[:8]
+        expand_key = f"expand_{row_key}"
 
-    if not sel_lbl:
-        return
-
-    sel = opts[sel_lbl]
-
-    with st.expander("📋 تفاصيل الشكوى الكاملة", expanded=True):
-        d1, d2, d3 = st.columns(3)
-        with d1:
-            st.markdown(f"**رقم الشكوى:** {sel.get('complaint_number','—')}")
-            st.markdown(f"**الفرع:** {sel.get('branch_name','—')}")
-            st.markdown(f"**اسم مقدم الشكوى:** {sel.get('complainant_name','—')}")
-            st.markdown(f"**صفة مقدم الشكوى:** {sel.get('complainant_role','—')}")
-        with d2:
-            st.markdown(f"**تاريخ التقديم:** {str(sel.get('submission_date','—'))[:10]}")
-            st.markdown(f"**رقم بطاقة العميل:** {sel.get('client_card_number','—') or '—'}")
-            st.markdown(f"**رقم الهاتف:** {sel.get('client_phone','—') or '—'}")
-            st.markdown(f"**طريقة الاستقبال:** {sel.get('reception_method','—')}")
-        with d3:
-            st.markdown("**الموقف النهائي:**")
-            st.markdown(_status_badge(sel.get('final_status','—')), unsafe_allow_html=True)
-            st.markdown(f"**تاريخ إبلاغ العميل:** {str(sel.get('notification_date','—') or '—')[:10]}")
-            st.markdown(f"**طريقة الرد:** {sel.get('response_method','—') or '—'}")
-            st.markdown(f"**المدخل:** {sel.get('created_by_name','—')}")
-
-        st.markdown("**📝 موجز الشكوى:**")
-        st.info(sel.get('complaint_summary', '—'))
-
-        if sel.get('attached_documents'):
-            st.markdown(f"**📎 المستندات المرفقة:** {sel['attached_documents']}")
-        if sel.get('investigation_summary'):
-            st.markdown("**🔍 موجز نتيجة الفحص:**")
-            st.success(sel['investigation_summary'])
-        if sel.get('rejection_justification'):
-            st.markdown("**⚠️ مبررات الرفض:**")
-            st.error(sel['rejection_justification'])
-
-    with st.expander("✏️ طلب تعديل هذه الشكوى", expanded=False):
-        st.info("💡 يمكنك تعديل الحقول التالية — سيُرسل الطلب للإدارة وسيتم إشعارك بالنتيجة.")
-
-        with st.form(f"edit_form_{sel['id'][:8]}"):
-            RESP_OPTS   = ["تليفونيا","وسائل تواصل اجتماعي","بريد الكتروني","خطاب"]
-            STATUS_OPTS = ["قيد الدراسة","مقبول","مرفوض","تم الحل جزئياً","تم الحل"]
-
-            if is_admin:
-                ec1, ec2 = st.columns(2)
-                with ec1:
-                    curr_notif = sel.get('notification_date')
-                    if curr_notif is None or pd.isna(curr_notif):
-                        notif_val = datetime.now().date()
-                    else:
-                        try:    notif_val = pd.to_datetime(curr_notif).date()
-                        except: notif_val = datetime.now().date()
-                    new_notif = st.date_input("📅 تاريخ إبلاغ العميل بنتيجة الشكوى", value=notif_val)
-                with ec2:
-                    curr_resp = sel.get('response_method') or RESP_OPTS[0]
-                    resp_idx  = RESP_OPTS.index(curr_resp) if curr_resp in RESP_OPTS else 0
-                    new_resp  = st.selectbox("📞 طريقة الرد على الشاكي", RESP_OPTS, index=resp_idx)
-
-                curr_status = sel.get('final_status') or STATUS_OPTS[0]
-                st_idx      = STATUS_OPTS.index(curr_status) if curr_status in STATUS_OPTS else 0
-                new_status  = st.selectbox("📊 موقف الشكوى النهائي", STATUS_OPTS, index=st_idx)
-
-                new_inv = st.text_area(
-                    "🔍 موجز ما انتهى إليه فحص الشكوى من رأى",
-                    value=sel.get('investigation_summary') or "", height=90
-                )
-                new_rej = ""
-                if new_status == "مرفوض":
-                    new_rej = st.text_area(
-                        "⚠️ المبررات في حالة رفض الشكوى",
-                        value=sel.get('rejection_justification') or "", height=70
-                    )
-            else:
-                st.info("📝 يمكنك اقتراح تغييرات على الشكوى. سيتم مراجعتها من قبل الإدارة.")
-                curr_notif = sel.get('notification_date')
-                if curr_notif is None or pd.isna(curr_notif):
-                    notif_val = datetime.now().date()
-                else:
-                    try:    notif_val = pd.to_datetime(curr_notif).date()
-                    except: notif_val = datetime.now().date()
-                new_notif = st.date_input("📅 تاريخ إبلاغ العميل بنتيجة الشكوى", value=notif_val)
-
-                curr_resp = sel.get('response_method') or RESP_OPTS[0]
-                resp_idx  = RESP_OPTS.index(curr_resp) if curr_resp in RESP_OPTS else 0
-                new_resp  = st.selectbox("📞 طريقة الرد على الشاكي", RESP_OPTS, index=resp_idx)
-
-                new_inv = st.text_area(
-                    "🔍 موجز ما انتهى إليه فحص الشكوى من رأى",
-                    value=sel.get('investigation_summary') or "", height=90
-                )
-                new_status = sel.get('final_status') or STATUS_OPTS[0]
-                st.info(f"⚠️ حالة الشكوى الحالية: **{new_status}** (لا يمكن تغييرها إلا من قبل الإدارة)")
-                new_rej = ""
-
-            edit_note_txt = st.text_input("💬 ملاحظة إضافية لطلب التعديل (اختياري)")
-            btn_submit = st.form_submit_button("📤 إرسال طلب التعديل", use_container_width=True)
-
-            if btn_submit:
-                changes = {}
-                old_n = str(sel.get('notification_date') or "")
-                new_n = new_notif.isoformat()
-                if old_n != new_n and old_n not in ("None",""):
-                    changes['notification_date'] = {"old": old_n, "new": new_n, "label": "تاريخ إبلاغ العميل"}
-
-                old_r = sel.get('response_method') or ""
-                if old_r != new_resp:
-                    changes['response_method'] = {"old": old_r, "new": new_resp, "label": "طريقة الرد على الشاكي"}
-
-                old_i = sel.get('investigation_summary') or ""
-                if old_i != new_inv.strip() and new_inv.strip() != "":
-                    changes['investigation_summary'] = {"old": old_i, "new": new_inv.strip() or "", "label": "موجز نتيجة الفحص"}
-
-                if is_admin:
-                    old_s = sel.get('final_status') or ""
-                    if old_s != new_status:
-                        changes['final_status'] = {"old": old_s, "new": new_status, "label": "موقف الشكوى النهائي"}
-                    if new_status == "مرفوض":
-                        old_rej = sel.get('rejection_justification') or ""
-                        if old_rej != new_rej.strip():
-                            changes['rejection_justification'] = {"old": old_rej, "new": new_rej.strip() or "", "label": "مبررات الرفض"}
-
-                if not changes:
-                    st.warning("⚠️ لم تقم بإجراء أي تغييرات على الحقول! قم بتعديل قيمة أحد الحقول ثم أرسل الطلب.")
-                else:
-                    if edit_note_txt:
-                        changes['_note'] = edit_note_txt
-                    with st.spinner("جاري إرسال طلب التعديل..."):
-                        ok, result = submit_edit_request_db(
-                            sel['id'], sel['complaint_number'],
-                            sel['branch_name'], changes, user
-                        )
-                    if ok:
-                        st.success("✅ تم إرسال طلب التعديل — في انتظار موافقة الإدارة.")
-                        st.rerun()
-                    else:
-                        st.error(f"❌ خطأ: {result}")
-
-    # ── زر الحذف للمسؤول فقط ──
-    if is_admin:
-        st.markdown("---")
-        st.markdown(
-            '<div class="sec-title" style="border-right-color:#dc2626;">⚠️ منطقة المسؤول — حذف شكوى</div>',
-            unsafe_allow_html=True
+        # صف الشكوى مع الزر
+        col_num, col_date, col_br, col_name, col_rec, col_status, col_by, col_btn = st.columns(
+            [2, 1.5, 2, 2.5, 2, 2, 1.8, 1.5]
         )
-        delete_reason = st.text_input("سبب الحذف (اختياري)", key=f"delete_reason_{sel['id'][:8]}")
-        confirm_key   = f"confirm_delete_{sel['id'][:8]}"
+        bg = "#f8fafc" if i % 2 == 0 else "#ffffff"
 
-        col_a, col_b, col_c = st.columns([3, 1, 1])
-        with col_b:
-            if st.button("🗑️ حذف الشكوى", key=f"btn_delete_{sel['id'][:8]}", use_container_width=True):
-                st.session_state[confirm_key] = True
-
-        if st.session_state.get(confirm_key, False):
-            st.warning("⚠️ هل أنت متأكد من حذف هذه الشكوى؟ ستُنقل إلى سلة المحذوفات.")
-            col_yes, col_no, _ = st.columns([1, 1, 3])
-            with col_yes:
-                if st.button("✔️ نعم، احذف", key=f"confirm_yes_{sel['id'][:8]}", use_container_width=True):
-                    with st.spinner("جاري حذف الشكوى..."):
-                        if soft_delete_complaint(sel['id'], sel['complaint_number'], user, delete_reason):
-                            st.success(f"✅ تم حذف الشكوى {sel['complaint_number']} ونقلها إلى سلة المحذوفات")
-                            del st.session_state[confirm_key]
-                            st.rerun()
-                        else:
-                            st.error("❌ خطأ في حذف الشكوى")
-            with col_no:
-                if st.button("✖️ إلغاء", key=f"confirm_no_{sel['id'][:8]}", use_container_width=True):
-                    del st.session_state[confirm_key]
+        with col_num:
+            st.markdown(
+                f"<div style='background:{bg};padding:10px 8px;border-radius:8px;"
+                f"font-weight:700;color:#1e3a8a;font-size:12px;text-align:center;'>"
+                f"{row.get('complaint_number','—')}</div>",
+                unsafe_allow_html=True
+            )
+        with col_date:
+            st.markdown(
+                f"<div style='background:{bg};padding:10px 8px;border-radius:8px;"
+                f"font-size:12px;text-align:center;color:#475569;'>"
+                f"{str(row.get('submission_date','—'))[:10]}</div>",
+                unsafe_allow_html=True
+            )
+        with col_br:
+            st.markdown(
+                f"<div style='background:{bg};padding:10px 8px;border-radius:8px;"
+                f"font-size:12px;text-align:center;color:#475569;'>"
+                f"{row.get('branch_name','—')}</div>",
+                unsafe_allow_html=True
+            )
+        with col_name:
+            st.markdown(
+                f"<div style='background:{bg};padding:10px 8px;border-radius:8px;"
+                f"font-size:12px;text-align:center;color:#475569;'>"
+                f"{row.get('complainant_name','—')}</div>",
+                unsafe_allow_html=True
+            )
+        with col_rec:
+            st.markdown(
+                f"<div style='background:{bg};padding:10px 8px;border-radius:8px;"
+                f"font-size:12px;text-align:center;color:#475569;'>"
+                f"{row.get('reception_method','—')}</div>",
+                unsafe_allow_html=True
+            )
+        with col_status:
+            st.markdown(
+                f"<div style='background:{bg};padding:8px 4px;border-radius:8px;text-align:center;'>"
+                f"{_status_badge(row.get('final_status','—'))}</div>",
+                unsafe_allow_html=True
+            )
+        with col_by:
+            st.markdown(
+                f"<div style='background:{bg};padding:10px 8px;border-radius:8px;"
+                f"font-size:11px;text-align:center;color:#64748b;'>"
+                f"{row.get('created_by_name','—')}</div>",
+                unsafe_allow_html=True
+            )
+        with col_btn:
+            if st.session_state.get(expand_key, False):
+                if st.button("▲ إغلاق", key=f"close_{row_key}_{i}", use_container_width=True):
+                    st.session_state[expand_key] = False
                     st.rerun()
+            else:
+                if st.button("🔍 عرض", key=f"view_{row_key}_{i}", use_container_width=True):
+                    # أغلق أي شكوى مفتوحة أخرى
+                    for k in list(st.session_state.keys()):
+                        if k.startswith("expand_") and k != expand_key:
+                            st.session_state[k] = False
+                    st.session_state[expand_key] = True
+                    st.rerun()
+
+        # التفاصيل تظهر تحت الصف إذا كان مفتوحاً
+        if st.session_state.get(expand_key, False):
+            sel = row
+
+            with st.container():
+                st.markdown(
+                    f"<div style='background:#f0f7ff;border:1.5px solid #2563eb;"
+                    f"border-right:5px solid #2563eb;border-radius:14px;"
+                    f"padding:20px 24px;margin:4px 0 16px;'>",
+                    unsafe_allow_html=True
+                )
+
+                st.markdown("#### 📋 تفاصيل الشكوى")
+                d1, d2, d3 = st.columns(3)
+                with d1:
+                    st.markdown(f"**رقم الشكوى:** {sel.get('complaint_number','—')}")
+                    st.markdown(f"**الفرع:** {sel.get('branch_name','—')}")
+                    st.markdown(f"**اسم مقدم الشكوى:** {sel.get('complainant_name','—')}")
+                    st.markdown(f"**صفة مقدم الشكوى:** {sel.get('complainant_role','—')}")
+                with d2:
+                    st.markdown(f"**تاريخ التقديم:** {str(sel.get('submission_date','—'))[:10]}")
+                    st.markdown(f"**رقم بطاقة العميل:** {sel.get('client_card_number','—') or '—'}")
+                    st.markdown(f"**رقم الهاتف:** {sel.get('client_phone','—') or '—'}")
+                    st.markdown(f"**طريقة الاستقبال:** {sel.get('reception_method','—')}")
+                with d3:
+                    st.markdown("**الموقف النهائي:**")
+                    st.markdown(_status_badge(sel.get('final_status','—')), unsafe_allow_html=True)
+                    st.markdown(f"**تاريخ إبلاغ العميل:** {str(sel.get('notification_date','—') or '—')[:10]}")
+                    st.markdown(f"**طريقة الرد:** {sel.get('response_method','—') or '—'}")
+                    st.markdown(f"**المدخل:** {sel.get('created_by_name','—')}")
+
+                st.markdown("**📝 موجز الشكوى:**")
+                st.info(sel.get('complaint_summary', '—'))
+
+                if sel.get('attached_documents'):
+                    st.markdown(f"**📎 المستندات المرفقة:** {sel['attached_documents']}")
+                if sel.get('investigation_summary'):
+                    st.markdown("**🔍 موجز نتيجة الفحص:**")
+                    st.success(sel['investigation_summary'])
+                if sel.get('rejection_justification'):
+                    st.markdown("**⚠️ مبررات الرفض:**")
+                    st.error(sel['rejection_justification'])
+
+                st.markdown("---")
+                st.markdown("#### ✏️ طلب تعديل هذه الشكوى")
+                st.info("💡 سيُرسل الطلب للإدارة وسيتم إشعارك بالنتيجة.")
+
+                with st.form(f"edit_form_{row_key}_{i}"):
+                    RESP_OPTS   = ["تليفونيا","وسائل تواصل اجتماعي","بريد الكتروني","خطاب"]
+                    STATUS_OPTS = ["قيد الدراسة","مقبول","مرفوض","تم الحل جزئياً","تم الحل"]
+
+                    if is_admin:
+                        ec1, ec2 = st.columns(2)
+                        with ec1:
+                            curr_notif = sel.get('notification_date')
+                            notif_val  = datetime.now().date()
+                            if curr_notif and not pd.isna(curr_notif):
+                                try: notif_val = pd.to_datetime(curr_notif).date()
+                                except: pass
+                            new_notif = st.date_input("📅 تاريخ إبلاغ العميل", value=notif_val, key=f"nd_{row_key}_{i}")
+                        with ec2:
+                            curr_resp = sel.get('response_method') or RESP_OPTS[0]
+                            resp_idx  = RESP_OPTS.index(curr_resp) if curr_resp in RESP_OPTS else 0
+                            new_resp  = st.selectbox("📞 طريقة الرد", RESP_OPTS, index=resp_idx, key=f"rsp_{row_key}_{i}")
+
+                        curr_status = sel.get('final_status') or STATUS_OPTS[0]
+                        st_idx      = STATUS_OPTS.index(curr_status) if curr_status in STATUS_OPTS else 0
+                        new_status  = st.selectbox("📊 موقف الشكوى النهائي", STATUS_OPTS, index=st_idx, key=f"st_{row_key}_{i}")
+
+                        new_inv = st.text_area("🔍 موجز نتيجة الفحص",
+                            value=sel.get('investigation_summary') or "", height=80, key=f"inv_{row_key}_{i}")
+                        new_rej = ""
+                        if new_status == "مرفوض":
+                            new_rej = st.text_area("⚠️ مبررات الرفض",
+                                value=sel.get('rejection_justification') or "", height=60, key=f"rej_{row_key}_{i}")
+                    else:
+                        curr_notif = sel.get('notification_date')
+                        notif_val  = datetime.now().date()
+                        if curr_notif and not pd.isna(curr_notif):
+                            try: notif_val = pd.to_datetime(curr_notif).date()
+                            except: pass
+                        new_notif = st.date_input("📅 تاريخ إبلاغ العميل", value=notif_val, key=f"nd_{row_key}_{i}")
+
+                        curr_resp = sel.get('response_method') or RESP_OPTS[0]
+                        resp_idx  = RESP_OPTS.index(curr_resp) if curr_resp in RESP_OPTS else 0
+                        new_resp  = st.selectbox("📞 طريقة الرد", RESP_OPTS, index=resp_idx, key=f"rsp_{row_key}_{i}")
+
+                        new_inv = st.text_area("🔍 موجز نتيجة الفحص",
+                            value=sel.get('investigation_summary') or "", height=80, key=f"inv_{row_key}_{i}")
+                        new_status = sel.get('final_status') or STATUS_OPTS[0]
+                        st.caption(f"⚠️ حالة الشكوى الحالية: **{new_status}** — لا يمكن تغييرها إلا من الإدارة")
+                        new_rej = ""
+
+                    edit_note_txt = st.text_input("💬 ملاحظة إضافية (اختياري)", key=f"note_{row_key}_{i}")
+                    btn_submit    = st.form_submit_button("📤 إرسال طلب التعديل", use_container_width=True)
+
+                    if btn_submit:
+                        changes = {}
+                        old_n = str(sel.get('notification_date') or "")
+                        new_n = new_notif.isoformat()
+                        if old_n != new_n and old_n not in ("None",""):
+                            changes['notification_date'] = {"old": old_n, "new": new_n, "label": "تاريخ إبلاغ العميل"}
+                        old_r = sel.get('response_method') or ""
+                        if old_r != new_resp:
+                            changes['response_method'] = {"old": old_r, "new": new_resp, "label": "طريقة الرد على الشاكي"}
+                        old_i = sel.get('investigation_summary') or ""
+                        if old_i != new_inv.strip() and new_inv.strip():
+                            changes['investigation_summary'] = {"old": old_i, "new": new_inv.strip(), "label": "موجز نتيجة الفحص"}
+                        if is_admin:
+                            old_s = sel.get('final_status') or ""
+                            if old_s != new_status:
+                                changes['final_status'] = {"old": old_s, "new": new_status, "label": "موقف الشكوى النهائي"}
+                            if new_status == "مرفوض":
+                                old_rej = sel.get('rejection_justification') or ""
+                                if old_rej != new_rej.strip():
+                                    changes['rejection_justification'] = {"old": old_rej, "new": new_rej.strip(), "label": "مبررات الرفض"}
+
+                        if not changes:
+                            st.warning("⚠️ لم تقم بأي تغييرات!")
+                        else:
+                            if edit_note_txt:
+                                changes['_note'] = edit_note_txt
+                            with st.spinner("جاري إرسال طلب التعديل..."):
+                                ok, result = submit_edit_request_db(
+                                    sel['id'], sel['complaint_number'],
+                                    sel['branch_name'], changes, user
+                                )
+                            if ok:
+                                st.success("✅ تم إرسال طلب التعديل — في انتظار موافقة الإدارة.")
+                                st.session_state[expand_key] = False
+                                st.rerun()
+                            else:
+                                st.error(f"❌ خطأ: {result}")
+
+                # حذف للمسؤول فقط
+                if is_admin:
+                    st.markdown("---")
+                    st.markdown('<div style="color:#dc2626;font-weight:700;font-size:13px;margin-bottom:8px;">⚠️ منطقة المسؤول — حذف الشكوى</div>', unsafe_allow_html=True)
+                    delete_reason = st.text_input("سبب الحذف (اختياري)", key=f"del_reason_{row_key}_{i}")
+                    confirm_key   = f"confirm_delete_{row_key}_{i}"
+
+                    col_a, col_b, _ = st.columns([3, 1, 2])
+                    with col_b:
+                        if st.button("🗑️ حذف", key=f"btn_delete_{row_key}_{i}", use_container_width=True):
+                            st.session_state[confirm_key] = True
+
+                    if st.session_state.get(confirm_key, False):
+                        st.warning("⚠️ هل أنت متأكد؟ ستُنقل الشكوى لسلة المحذوفات.")
+                        col_yes, col_no, _ = st.columns([1, 1, 3])
+                        with col_yes:
+                            if st.button("✔️ نعم", key=f"confirm_yes_{row_key}_{i}", use_container_width=True):
+                                with st.spinner("جاري الحذف..."):
+                                    if soft_delete_complaint(sel['id'], sel['complaint_number'], user, delete_reason):
+                                        st.success(f"✅ تم حذف الشكوى {sel['complaint_number']}")
+                                        del st.session_state[confirm_key]
+                                        st.session_state[expand_key] = False
+                                        st.rerun()
+                                    else:
+                                        st.error("❌ خطأ في الحذف")
+                        with col_no:
+                            if st.button("✖️ إلغاء", key=f"confirm_no_{row_key}_{i}", use_container_width=True):
+                                del st.session_state[confirm_key]
+                                st.rerun()
+
+                st.markdown("</div>", unsafe_allow_html=True)
+
+        st.markdown("<hr style='margin:4px 0;border:none;border-top:1px solid #e2e8f0;'>", unsafe_allow_html=True)
 
 
 # ── تبويب 3: طلبات التعديل ───────────────────────────────────────
@@ -1593,7 +1624,7 @@ def show_edit_requests_tab(user, is_admin):
                 new_v = vals.get('new','—') or '—'
                 chg_rows += (
                     f"<tr>"
-                    f"<td style='padding:8px 12px;border-bottom:1px solid #e2e8f0;font-weight:600;color:#475569;'>{label}</td>"
+                    f"<td style='padding:8px 12px;border-bottom:1px solid #e2e8f0;font-weight:600;color:#475569;'>{label}<tr>"
                     f"<td style='padding:8px 12px;border-bottom:1px solid #e2e8f0;color:#dc2626;text-decoration:line-through;'>{old_v}</td>"
                     f"<td style='padding:8px 12px;border-bottom:1px solid #e2e8f0;color:#059669;font-weight:700;'>{new_v}</td>"
                     f"</tr>"
@@ -1942,10 +1973,10 @@ def reports_page():
                 if df_code.empty: continue
                 bg,fg=code_color_map_html[code]; cnt=len(df_code); amt=df_code['المبلغ'].sum()
                 date_cell=(f"<td rowspan='{rowspan_val}' style='padding:10px 14px;text-align:center;border-bottom:2px solid #cbd5e1;border-left:1px solid #e2e8f0;font-weight:700;color:#1e3a8a;vertical-align:middle;background:#f8fafc;font-size:13px;white-space:nowrap;'>{d}</td>") if first_code else ""
-                rows_html+=(f"<tr>"+date_cell+f"<td style='padding:9px 14px;text-align:center;border-bottom:1px solid #e2e8f0;background:{bg};color:{fg};font-weight:700;font-size:12px;'>{code}</td><td style='padding:9px 14px;text-align:center;border-bottom:1px solid #e2e8f0;background:{bg};color:{fg};font-weight:700;'>{cnt:,}</td><td style='padding:9px 14px;text-align:center;border-bottom:1px solid #e2e8f0;background:{bg};color:{fg};font-weight:700;'>{amt:,.2f}</td></td>"); first_code=False
+                rows_html+=(f"<tr>"+date_cell+f"<td style='padding:9px 14px;text-align:center;border-bottom:1px solid #e2e8f0;background:{bg};color:{fg};font-weight:700;font-size:12px;'>{code}</td><td style='padding:9px 14px;text-align:center;border-bottom:1px solid #e2e8f0;background:{bg};color:{fg};font-weight:700;'>{cnt:,}</td><td style='padding:9px 14px;text-align:center;border-bottom:1px solid #e2e8f0;background:{bg};color:{fg};font-weight:700;'>{amt:,.2f}</td><tr>"); first_code=False
             rows_html+=(f"<tr style='background:#1e3a8a;'><td style='padding:10px 14px;text-align:center;color:#fff;font-weight:800;border-bottom:2px solid #60a5fa;font-size:12px;'>✦ إجمالي {d}</td><td style='padding:10px;text-align:center;color:#bfdbfe;font-weight:800;border-bottom:2px solid #60a5fa;'>الكل</td><td style='padding:10px;text-align:center;color:#fff;font-weight:800;border-bottom:2px solid #60a5fa;'>{day_total_count:,}</td><td style='padding:10px;text-align:center;color:#fde68a;font-weight:800;border-bottom:2px solid #60a5fa;'>{day_total_amt:,.2f}</td></tr>")
         grand_count=len(final_df); grand_amt=final_df['المبلغ'].sum()
-        rows_html+=(f"<tr style='background:#0f172a;'><td style='padding:12px 14px;text-align:center;color:#fff;font-weight:800;'>الإجمالي الكلي</td><td style='padding:12px;text-align:center;color:#93c5fd;font-weight:800;'>—</td><td style='padding:12px;text-align:center;color:#fff;font-weight:800;'>{grand_count:,}</td><td style='padding:12px;text-align:center;color:#fde68a;font-weight:800;'>{grand_amt:,.2f}</td></tr>")
+        rows_html+=(f"<tr style='background:#0f172a;'><td style='padding:12px 14px;text-align:center;color:#fff;font-weight:800;'>الإجمالي الكلي</td><td style='padding:12px;text-align:center;color:#93c5fd;font-weight:800;'>—</td><td style='padding:12px;text-align:center;color:#fff;font-weight:800;'>{grand_count:,}</td><td style='padding:12px;text-align:center;color:#fde68a;font-weight:800;'>{grand_amt:,.2f}</td><tr>")
         th="padding:12px 14px;text-align:center;color:#fff;font-size:13px;font-weight:700;white-space:nowrap;"
         legend_html=" &nbsp; ".join([f"<span style='background:{code_color_map_html[c][0]};color:{code_color_map_html[c][1]};padding:3px 10px;border-radius:10px;font-size:12px;font-weight:700;'>{c}</span>" for c in all_codes])
         st.markdown(f"<div style='margin-bottom:10px;'>🎨 <strong>دليل الألوان:</strong> &nbsp; {legend_html}</div>", unsafe_allow_html=True)
@@ -2161,7 +2192,7 @@ def outstanding_page():
 
     unique_branches = df_acc[branch_col].dropna().unique().tolist()
 
-    # دالة بناء جدول الفروع (كما هي في الكود القديم)
+    # دالة بناء جدول الفروع
     def build_branch_table(df_data, title_prefix=""):
         rows = []
         for br in sorted(df_data[branch_col].dropna().unique()):
