@@ -1317,7 +1317,7 @@ def show_list_tab(user, is_admin, user_branches):
       <th style='padding:11px 12px;color:#fff;text-align:center;white-space:nowrap;'>طريقة الاستقبال</th>
       <th style='padding:11px 12px;color:#fff;text-align:center;white-space:nowrap;'>موقف الشكوى</th>
       <th style='padding:11px 12px;color:#fff;text-align:center;white-space:nowrap;'>المدخل</th>
-    </table></thead><tbody>
+    </tr></thead><tbody>
     """
     for i, row in filtered.iterrows():
         bg = "#f8fafc" if i % 2 == 0 else "#ffffff"
@@ -1605,7 +1605,7 @@ def show_edit_requests_tab(user, is_admin):
                 f"<th style='padding:8px 12px;color:#fff;text-align:right;'>الحقل</th>"
                 f"<th style='padding:8px 12px;color:#fca5a5;text-align:center;'>القيمة القديمة</th>"
                 f"<th style='padding:8px 12px;color:#6ee7b7;text-align:center;'>القيمة الجديدة</th>"
-                f"</table></thead><tbody>{chg_rows}</tbody></table>",
+                f"</thead><tbody>{chg_rows}</tbody></table>",
                 unsafe_allow_html=True
             )
 
